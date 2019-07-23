@@ -16,8 +16,20 @@ namespace vo
 class Voxel {
 public:
         jql::AABB3D aabb;
-        jql::Vec4 color;
+        jql::Vec3 albedo;
         jql::Vec3 normal;
+        bool scatter(const jql::Ray& iray, const jql::ISect& isect,
+                     jql::Vec3* att, jql::Ray* sray) const
+        {
+                auto tmp = jql::dot(isect.normal, -iray.d);
+                if (tmp <= 0)
+                        return false;
+                auto d = 2 * tmp * isect.normal +
+                         iray.d;
+                *sray = jql::Ray{ isect.hit, d };
+                *att = albedo;
+                return true;
+        }
 };
 
 std::vector<Voxel> obj2voxel(const std::string& filepath, float voxel_size);

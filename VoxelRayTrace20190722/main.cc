@@ -4,60 +4,106 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-using Color = jql::Mat<unsigned char, 3, 1>;
+using Color = jql::Mat<std::uint8_t, 3, 1>;
+using FColor = jql::Vec3;
 
-bool Trace(const vo::VoxelOctree& root, const jql::Ray& ray,
-           Color* color, int trace_level)
+void write_pixel(std::uint8_t* img, int w, int x, int y, Color color)
 {
-        if (trace_level == 0)
-                return false;
-        jql::Vec3 env{ 0, .5f, .5f };
+        auto* p = &img[3 * (y * w + x)];
+        p[0] = color.x;
+        p[1] = color.y;
+        p[2] = color.z;
+}
+
+void write_pixel(std::uint8_t* img, int w, int x, int y, FColor color)
+{
+        auto* p = &img[3 * (y * w + x)];
+
+        color = jql::clamp<float>(color, 0, 1);
+
+        p[0] = color.x * 255;
+        p[1] = color.y * 255;
+        p[2] = color.z * 255;
+}
+
+Color read_pixel(std::uint8_t* img, int w, int x, int y)
+{
+        auto* p = &img[3 * (y * w + x)];
+        return { p[0], p[1], p[2] };
+}
+
+jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
+{
         auto voxel = vo::ray_march(root, ray);
         if (!voxel) {
-                *color = jql::cast<Color>(env * 255);
-                return false;
+                return { 1, 1, 1 };
         }
-        //*color = jql::cast<Color>(voxel->color*255);
-        //return true;
-        jql::Vec3 fcolor{ 1, 1, 1 };
         jql::ISect isect{};
-
-        if (!voxel->aabb.isect(ray, &isect)) {
-                *color = jql::cast<Color>(env * 255);
-                return false;
-        }
-
-        jql::Vec3 rdir = isect.reflect(-ray.d);
-        jql::Ray rray{ isect.hit, rdir, 1e-3f, 1000.f };
-
-        Color rcolor{};
-        auto diffuse = jql::dot(isect.normal, -ray.d);
-        if (diffuse <= 0) {
-                *color = { 0, 0, 0 };
-                return false;
-        }
-
-        if (Trace(root, rray, &rcolor, trace_level - 1)) {
-                *color = jql::cast<Color>((rcolor / 256.f) *
-                                          (jql::cast<jql::Vec3>(voxel->color)) * diffuse *
-                                          255.f);
+        voxel->aabb.isect(ray, &isect);
+        jql::Ray sray;
+        jql::Vec3 att;
+        if (depth > 0 && voxel->scatter(ray, isect, &att, &sray)) {
+                sray.tmin += jql::eps;
+                return att * trace(root, sray, depth - 1);
         }
         else {
-                *color = jql::cast<Color>(
-                        1.f * env *
-                        (jql::cast<jql::Vec3>(voxel->color)) *
-                                          diffuse * 255.f);
+                return { 0, 0, 0 };
         }
-
-        //*color = { 255, 255, 255 };
-        return true;
-}
+} 
+//
+//bool Trace(const vo::VoxelOctree& root, const jql::Ray& ray, Color* color,
+//           int trace_level)
+//{
+//        jql::Vec3 env{ 1, 1, 1 };
+//        auto voxel = vo::ray_march(root, ray);
+//        if (!voxel) {
+//                *color = jql::cast<Color>(env * 255);
+//                return false;
+//        }
+//        //*color = jql::cast<Color>(voxel->color*255);
+//        //return true;
+//        jql::Vec3 fcolor{ 1, 1, 1 };
+//        jql::ISect isect{};
+//
+//        if (!voxel->aabb.isect(ray, &isect)) {
+//                std::cerr << "Trace internal err.\n";
+//                return false;
+//        }
+//        jql::Vec3 att{};
+//        jql::Ray sray{};
+//        if (trace_level > 0 && voxel->scatter(ray, isect, &att, &sray)) {
+//                ;
+//        }
+//
+//        jql::Vec3 rdir = isect.reflect(-ray.d);
+//        jql::Ray rray{ isect.hit, rdir, 1e-3f, 1000.f };
+//
+//        Color rcolor{};
+//        auto diffuse = jql::dot(isect.normal, -ray.d);
+//        if (diffuse <= 0) {
+//                *color = { 0, 0, 0 };
+//                return false;
+//        }
+//
+//        if (Trace(root, rray, &rcolor, trace_level - 1)) {
+//                *color = jql::cast<Color>((rcolor / 256.f) * (voxel->albedo) *
+//                                          diffuse * 255.f);
+//        }
+//        else {
+//                *color = jql::cast<Color>(1.f * env * (voxel->albedo) *
+//                                          diffuse * 255.f);
+//        }
+//
+//        //*color = { 255, 255, 255 };
+//        return true;
+//}
 
 int main()
 {
 
         auto voxels = vo::obj2voxel(
-                "D:\\jiangqilei\\Documents\\Asset\\color_lion\\color_lion.obj", .01f);
+                "D:\\jiangqilei\\Documents\\Asset\\color_lion\\color_lion.obj",
+                .01f);
 
         //auto voxels = vo::obj2voxel(
         //        "D:\\jiangqilei\\Documents\\Asset\\sphere\\sphere.obj", .1f);
@@ -82,15 +128,11 @@ int main()
                         pos.y += (1.f * x / W - .5f) * SW;
                         pos.z += (1.f * (H - y - 1) / H - .5f) * SH;
                         jql::Ray ray{ rayo, pos - rayo };
-                        Color color{};
                         //if (x == 98 && y == 109)
                         //        jql::print("j\n");
-                        Trace(root, ray, &color, 5);
-
-                        auto idx = (y * W + x) * 3;
-                        d[idx + 0] = static_cast<std::uint8_t>(color.x);
-                        d[idx + 1] = static_cast<std::uint8_t>(color.y);
-                        d[idx + 2] = static_cast<std::uint8_t>(color.z);
+                        /*Trace(root, ray, &color, 5);*/
+                        auto color = trace(root, ray, 5);
+                        write_pixel(d.data(), W, x, y, color);
                 }
         }
 

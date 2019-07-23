@@ -10,7 +10,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "./stb_image.h"
 
-
 namespace vo
 {
 
@@ -178,15 +177,18 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                         }
                         auto trivoxmap = trivox(tri, voxel_size);
                         for (auto& trivox : trivoxmap) {
-                                trivox.second.color = color;
+                                trivox.second.albedo =
+                                        jql::cast<jql::Vec3>(color);
                                 trivox.second.normal = normal;
                                 auto p = voxmap.find(trivox.first);
                                 if (p == voxmap.end()) {
                                         voxmap.insert(trivox);
                                 }
                                 else {
-                                        p->second.color =
-                                                (p->second.color + color) * .5f;
+                                        p->second.albedo =
+                                                (p->second.albedo +
+                                                 jql::cast<jql::Vec3>(color)) *
+                                                .5f;
                                         p->second.normal = jql::normalize(
                                                 p->second.normal + normal);
                                 }
@@ -335,14 +337,17 @@ const Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray)
                                         records.push_back({ t, i });
                         }
 
-                        std::sort(records.begin(), records.end(),
-                                  [](const Record& lhs, const Record& rhs) {
-                                          return lhs.depth < rhs.depth;
-                                  });
-
                         if (records.empty())
                                 continue;
-                        return child->voxels[records[0].i];
+
+                        auto& p = std::min_element(
+                                          records.begin(), records.end(),
+                                          [](const Record& lhs,
+                                             const Record& rhs) {
+                                                  return lhs.depth < rhs.depth;
+                                          })
+                                          ->i;
+                        return child->voxels[p];
                 }
 
                 TravRec r1{};
