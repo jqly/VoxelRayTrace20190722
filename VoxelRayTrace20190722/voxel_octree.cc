@@ -13,6 +13,8 @@
 namespace vo
 {
 
+jql::PCG Voxel::pcg{ 0xc01dbeef };
+
 class Image {
 public:
         std::vector<unsigned char> data;
@@ -149,9 +151,16 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                         // Tinyobj has per-face material.
                         jql::Vec4 color{};
                         jql::Vec3 normal{};
+                        VoxelType type;
 
                         const auto& mtl = materials[mesh.material_ids[f]];
-                        if (!mtl.diffuse_texname.empty()) {
+                        if (mtl.unknown_parameter.find("lightsource") !=
+                            mtl.unknown_parameter.end()) {
+                                type = VoxelType::LightSource;
+                                std::copy_n(mtl.ambient, 3, jql::begin(color));
+                        }
+                        else if (!mtl.diffuse_texname.empty()) {
+                                type = VoxelType::Object;
                                 auto found = imgmap.find(mtl.diffuse_texname);
                                 if (found == imgmap.end()) {
                                         auto image =
@@ -175,11 +184,14 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                                         &attrib.normals[3 * idx.normal_index],
                                         3, jql::begin(normal));
                         }
+                        else
+                                ;
                         auto trivoxmap = trivox(tri, voxel_size);
                         for (auto& trivox : trivoxmap) {
                                 trivox.second.albedo =
                                         jql::cast<jql::Vec3>(color);
                                 trivox.second.normal = normal;
+                                trivox.second.type = type;
                                 auto p = voxmap.find(trivox.first);
                                 if (p == voxmap.end()) {
                                         voxmap.insert(trivox);
