@@ -322,11 +322,27 @@ const Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray)
                 if (!child->aabb.isect(ray, nullptr))
                         continue;
                 if (child->is_leaf()) {
-                        if (child->voxels.empty())
-                                continue;
-                        // Find the closest voxel.
+                        struct Record {
+                                float depth;
+                                int i;
+                        };
 
-                        return child->voxels.front();
+                        std::vector<Record> records;
+
+                        for (int i = 0; i < child->voxels.size(); ++i) {
+                                float t{};
+                                if (child->voxels[i]->aabb.isectt(ray, &t))
+                                        records.push_back({ t, i });
+                        }
+
+                        std::sort(records.begin(), records.end(),
+                                  [](const Record& lhs, const Record& rhs) {
+                                          return lhs.depth < rhs.depth;
+                                  });
+
+                        if (records.empty())
+                                continue;
+                        return child->voxels[records[0].i];
                 }
 
                 TravRec r1{};

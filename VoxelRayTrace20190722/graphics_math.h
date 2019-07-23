@@ -1260,6 +1260,7 @@ public:
                         *t = t1;
                 else
                         return false;
+                return true;
         }
 
         bool isect(const Ray& ray, ISect* isect) const
