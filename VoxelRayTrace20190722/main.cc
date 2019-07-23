@@ -17,10 +17,11 @@ bool Trace(const vo::VoxelOctree& root, const jql::Ray& ray,
                 *color = jql::cast<Color>(env * 255);
                 return false;
         }
-        *color = jql::cast<Color>(voxel->color*255);
-        return true;
+        //*color = jql::cast<Color>(voxel->color*255);
+        //return true;
         jql::Vec3 fcolor{ 1, 1, 1 };
         jql::ISect isect{};
+
         if (!voxel->aabb.isect(ray, &isect)) {
                 *color = jql::cast<Color>(env * 255);
                 return false;
@@ -33,20 +34,19 @@ bool Trace(const vo::VoxelOctree& root, const jql::Ray& ray,
         auto diffuse = jql::dot(isect.normal, -ray.d);
         if (diffuse <= 0) {
                 *color = { 0, 0, 0 };
-                return true;
+                return false;
         }
+
         if (Trace(root, rray, &rcolor, trace_level - 1)) {
                 *color = jql::cast<Color>((rcolor / 256.f) *
-                                          (jql::cast<jql::Vec3>(voxel->color) / 256.f) * diffuse *
+                                          (jql::cast<jql::Vec3>(voxel->color)) * diffuse *
                                           255.f);
-                return true;
         }
         else {
                 *color = jql::cast<Color>(
                         1.f * env *
-                        (jql::cast<jql::Vec3>(voxel->color) / 256.f) *
+                        (jql::cast<jql::Vec3>(voxel->color)) *
                                           diffuse * 255.f);
-                return true;
         }
 
         //*color = { 255, 255, 255 };
