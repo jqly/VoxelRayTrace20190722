@@ -19,7 +19,7 @@ void addi_write_pixel(std::uint8_t* img, int w, int x, int y, FColor color)
 {
         auto* p = &img[3 * (y * w + x)];
 
-        color = jql::clamp<float>(color, 0, 1);
+        color = jql::clamp<float>(color, 0, .99f);
 
         p[0] += color.x * 255;
         p[1] += color.y * 255;
@@ -36,10 +36,10 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
 {
         auto voxel = vo::ray_march(root, ray);
         if (!voxel) {
-                return { 0,0,0 };
+                return { 1,1,1 };
         }
         if (voxel->type == vo::VoxelType::LightSource)
-                return { 1,1,1 };
+                return voxel->albedo;
         jql::ISect isect{};
         voxel->aabb.isect(ray, &isect);
         jql::Ray sray;
@@ -80,7 +80,7 @@ int main()
         for (int y = 0; y < H; ++y) {
                 for (int x = 0; x < W; ++x) {
                         jql::Vec3 pos = root.aabb.center();
-                        for (int s = 0; s < 4; ++s) {
+                        for (int s = 0; s < 100; ++s) {
                                 pos.x += 3.f;
                                 pos.y += ((x + distr(pcg)) / W - .5f) * SW;
                                 pos.z +=
@@ -89,7 +89,7 @@ int main()
                                 jql::Ray ray{ rayo, pos - rayo };
                                 auto color = trace(root, ray, 5);
                                 addi_write_pixel(d.data(), W, x, y,
-                                                 color*(1.f/4.f));
+                                                 color*(1.f/100.f));
                         }
                 }
         }
