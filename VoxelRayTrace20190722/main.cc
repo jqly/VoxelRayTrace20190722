@@ -1,5 +1,6 @@
 #include "voxel_octree.h"
 #include <iostream>
+#include "camera.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -36,7 +37,9 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
 {
         auto voxel = vo::ray_march(root, ray);
         if (!voxel) {
-                return { 1,1,1 };
+                float t = 0.5 * (ray.d.y + 1.0);
+                return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
+                                 jql::Vec3{ 0.5f, 0.7f, 1.0f }, t);
         }
         if (voxel->type == vo::VoxelType::LightSource)
                 return voxel->albedo;
@@ -59,42 +62,31 @@ int main()
         auto voxels = vo::obj2voxel(
                 "D:\\jiangqilei\\Documents\\Asset\\lionc\\lionc.obj", .1f);
 
-        //auto voxels = vo::obj2voxel(
-        //        "D:\\jiangqilei\\Documents\\Asset\\sphere\\sphere.obj", .1f);
-
-        //for (auto& vox : voxels)
-        //        jql::print("{},{},{}\n", vox.aabb.center().x,
-        //                   vox.aabb.center().y, vox.aabb.center().z);
-
         auto root = vo::build_voxel_octree(voxels);
 
         int W = 1024;
         int H = 1024;
         float SW = 1.f;
         float SH = 1.f;
-        std::vector<std::uint8_t> d(W * H * 3);
-        jql::Vec3 rayo = root.aabb.center();
-        rayo.x += 3.5f;
-        jql::PCG pcg{ 0xc01dbeef };
-        std::uniform_real_distribution<float> distr(0.2f, .8f);
-        for (int y = 0; y < H; ++y) {
-                for (int x = 0; x < W; ++x) {
-                        jql::Vec3 pos = root.aabb.center();
-                        for (int s = 0; s < 100; ++s) {
-                                pos.x += 3.f;
-                                pos.y += ((x + distr(pcg)) / W - .5f) * SW;
-                                pos.z +=
-                                        ((H - (y + distr(pcg)) - 1) / H - .5f) *
-                                        SH;
-                                jql::Ray ray{ rayo, pos - rayo };
-                                auto color = trace(root, ray, 5);
-                                addi_write_pixel(d.data(), W, x, y,
-                                                 color*(1.f/100.f));
-                        }
+
+        Film film(SW, SH, W, H);
+        Camera camera{
+                { 5, 0, 0 }, { 0, 0, 0 }, { 0, -1, 0 }, jql::to_radian(60.f)
+        };
+        Sampler sampler{};
+        auto samples = camera.GenerateSamples(film, sampler);
+        for (auto& sample : samples) {
+
+                jql::Vec3 color{};
+                for (const auto& ray : sample.rays) {
+                        auto c = trace(root, ray, 5);
+                        color += c;
                 }
+                color *= (1.f / sample.rays.size());
+                film.at(sample.x, sample.y) = color;
         }
 
-        //stbi_flip_vertically_on_write(true);
+        auto d = film.to_byte_array();
         stbi_write_bmp("./test.bmp", W, H, 3, d.data());
 
         return 0;

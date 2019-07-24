@@ -157,7 +157,7 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                         if (mtl.unknown_parameter.find("lightsource") !=
                             mtl.unknown_parameter.end()) {
                                 type = VoxelType::LightSource;
-                                std::copy_n(mtl.ambient, 3, jql::begin(color));
+                                std::copy_n(mtl.diffuse, 3, jql::begin(color));
                         }
                         else if (!mtl.diffuse_texname.empty()) {
                                 type = VoxelType::Object;

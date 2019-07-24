@@ -1067,6 +1067,13 @@ inline Vec3 point_transform(const Mat4& transform, const Vec3 point)
         return cast<Vec3>(point_);
 }
 
+inline Vec3 vector_transform(const Mat4& transform, const Vec3 vector)
+{
+        auto vector_ = cast<Vec4>(vector);
+        vector_ = dot(transform, vector_);
+        return cast<Vec3>(vector_);
+}
+
 // Solvers
 
 // ax^2+bx+c=0
