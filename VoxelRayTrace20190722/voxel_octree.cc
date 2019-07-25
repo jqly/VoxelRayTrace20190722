@@ -370,4 +370,23 @@ const Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray)
         }
         return nullptr;
 }
+bool Voxel::scatter(const jql::Ray& iray, const jql::ISect& isect,
+                    jql::Vec3* att, jql::Ray* sray) const
+{
+
+        auto tmp = jql::dot(isect.normal, -iray.d);
+        if (tmp <= 0)
+                return false;
+
+        std::uniform_real_distribution<float> distr{ -1, 1 };
+        jql::Vec3 p;
+        do {
+                p = 2.f * jql::Vec3{ distr(pcg), distr(pcg), distr(pcg) } -
+                    jql::Vec3{ 1, 1, 1 };
+        } while (jql::dot(p, p) >= 1.f);
+
+        *sray = jql::Ray{ isect.hit, isect.normal + p };
+        *att = albedo;
+        return true;
+}
 }

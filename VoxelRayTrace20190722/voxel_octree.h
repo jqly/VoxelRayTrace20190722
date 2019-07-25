@@ -23,30 +23,8 @@ public:
         jql::Vec3 albedo;
         jql::Vec3 normal;
 
-        jql::Vec3 random_in_unit_sphere() const
-        {
-                std::uniform_real_distribution<float> distr{ -1, 1 };
-                jql::Vec3 p;
-                do {
-                        p = 2.f * jql::Vec3{ distr(pcg), distr(pcg),
-                                             distr(pcg) } -
-                            jql::Vec3{ 1, 1, 1 };
-                } while (jql::dot(p, p) >= 1.f);
-                return p;
-        }
-
         bool scatter(const jql::Ray& iray, const jql::ISect& isect,
-                     jql::Vec3* att, jql::Ray* sray) const
-        {
-
-                auto tmp = jql::dot(isect.normal, -iray.d);
-                if (tmp <= 0)
-                        return false;
-
-                *sray = jql::Ray{ isect.hit, isect.normal+random_in_unit_sphere() };
-                *att = albedo;
-                return true;
-        }
+                     jql::Vec3* att, jql::Ray* sray) const;
         static jql::PCG pcg;
 };
 

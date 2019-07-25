@@ -61,7 +61,7 @@ public:
 
         Sampler()
         {
-                int N = 10;
+                int N = 6;
                 for (int i = 0; i < N - 1; ++i) {
                         for (int j = 0; j < N - 1; ++j) {
                                 samples.push_back(
@@ -110,8 +110,8 @@ public:
 
                                         rays.emplace_back(pos_, film_pos);
                                 }
-                                if (x == 478 && y == 473)
-                                        jql::print("stum\n");
+                                //if (x == 478 && y == 473)
+                                //        jql::print("stum\n");
                                 film_samples.push_back({ x, y, rays });
                         }
                 }
