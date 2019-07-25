@@ -35,6 +35,7 @@ public:
         jql::AABB3D aabb;
         std::vector<const Voxel*> voxels;
         std::unique_ptr<VoxelOctree> children[8];
+        float opacity = -1.f;
 
         VoxelOctree(const jql::AABB3D& aabb);
 
@@ -44,6 +45,8 @@ public:
 VoxelOctree build_voxel_octree(const std::vector<Voxel>& voxels);
 
 const Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray);
+
+float compute_ao(const VoxelOctree& root, const jql::ISect& isect, float res);
 }
 
 #endif

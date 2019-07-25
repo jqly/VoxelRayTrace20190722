@@ -5,6 +5,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+static float Res = .01f;
+
 using Color = jql::Mat<std::uint8_t, 3, 1>;
 using FColor = jql::Vec3;
 
@@ -43,8 +45,12 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
         }
         if (voxel->type == vo::VoxelType::LightSource)
                 return voxel->albedo;
+
         jql::ISect isect{};
         voxel->aabb.isect(ray, &isect);
+        float ao = vo::compute_ao(root, isect, Res);
+        return jql::Vec3{ 1-ao, 1-ao, 1-ao };
+
         jql::Ray sray;
         jql::Vec3 att;
         if (depth > 0 && voxel->scatter(ray, isect, &att, &sray)) {
@@ -58,9 +64,8 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
 
 int main()
 {
-
         auto voxels = vo::obj2voxel(
-                "D:\\jiangqilei\\Documents\\Asset\\lionc\\lionc.obj", .1f);
+                "D:\\jiangqilei\\Documents\\Asset\\lionc\\lionc.obj", Res);
 
         auto root = vo::build_voxel_octree(voxels);
 
@@ -71,7 +76,7 @@ int main()
 
         Film film(SW, SH, W, H);
         Camera camera{
-                { 5, 0, 0 }, { 0, 0, 0 }, { 0, -1, 0 }, jql::to_radian(60.f)
+                { 3, 0, -2 }, { 0, 0, -2 }, { 0, -1, 0 }, jql::to_radian(60.f)
         };
         Sampler sampler{};
         auto samples = camera.GenerateSamples(film, sampler);
