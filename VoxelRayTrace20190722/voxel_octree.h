@@ -14,6 +14,35 @@
 namespace vo
 {
 
+class SG {
+public:
+        jql::Vec3 axis;
+        float sharpness = -1;
+        jql::Vec3 amplitude;
+
+        SG()
+                : axis{ 0, 0, 0 }
+                , sharpness{ -1 }
+                , amplitude{ 0, 0, 0 }
+        {
+        }
+
+        SG(jql::Vec3 axis, float sharpness, jql::Vec3 amplitude)
+                : axis{ jql::normalize(axis) }
+                , sharpness{ sharpness }
+                , amplitude{ amplitude }
+        {
+        }
+
+        jql::Vec3 eval(jql::Vec3 d) const
+        {
+                float tmp = jql::dot(d, axis);
+                return amplitude * std::expf(sharpness * (tmp - 1.f));
+        }
+};
+
+SG dot(const SG& lhs, const SG& rhs);
+
 enum class VoxelType { Object, LightSource };
 
 class Voxel {
@@ -22,6 +51,7 @@ public:
         jql::AABB3D aabb;
         jql::Vec3 albedo;
         jql::Vec3 normal;
+        mutable SG sg{};
 
         bool scatter(const jql::Ray& iray, const jql::ISect& isect,
                      jql::Vec3* att, jql::Ray* sray) const;
@@ -36,6 +66,7 @@ public:
         std::vector<const Voxel*> voxels;
         std::unique_ptr<VoxelOctree> children[8];
         float opacity = -1.f;
+        SG sg{};
 
         VoxelOctree(const jql::AABB3D& aabb);
 
@@ -43,10 +74,12 @@ public:
 };
 
 VoxelOctree build_voxel_octree(const std::vector<Voxel>& voxels);
+float voxel_filter(VoxelOctree* root);
 
 const Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray);
 
-float compute_ao(const VoxelOctree& root, const jql::ISect& isect, float res);
+jql::Vec3 compute_litness(const VoxelOctree& root, const jql::ISect& isect,
+                          float res);
 }
 
 #endif

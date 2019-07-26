@@ -61,7 +61,7 @@ public:
 
         Sampler()
         {
-                int N = 6;
+                int N = 3;
                 for (int i = 0; i < N - 1; ++i) {
                         for (int j = 0; j < N - 1; ++j) {
                                 samples.push_back(
