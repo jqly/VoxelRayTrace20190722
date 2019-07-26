@@ -497,7 +497,7 @@ jql::Vec3 cone_trace_light(const VoxelOctree& root, const Cone& cone, float res)
                                   cone.step;
                         auto tmp = prob->sg.eval(-cone.d);
                         //jql::print("color: {}\n", tmp);
-                        lightness += a * tmp;
+                        lightness += prob->opacity * tmp;
                         //jql::print("opacity: {}\n", prob->opacity);
                         ////jql::print("a: {}\n", a);
                         //if (std::abs(tmp.x - tmp.y) > .1f) {
