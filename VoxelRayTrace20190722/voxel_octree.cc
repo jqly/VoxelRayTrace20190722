@@ -184,8 +184,10 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                                         &attrib.normals[3 * idx.normal_index],
                                         3, jql::begin(normal));
                         }
-                        else
-                                ;
+                        else {
+                                type = VoxelType::Unknown;
+                                std::copy_n(mtl.diffuse, 3, jql::begin(color));
+                        }
                         auto trivoxmap = trivox(tri, voxel_size);
                         for (auto& trivox : trivoxmap) {
                                 trivox.second.albedo =
@@ -304,13 +306,23 @@ float voxel_filter(VoxelOctree* root)
 SG dot(const SG& lhs, const SG& rhs)
 {
         auto d = jql::normalize(lhs.axis + rhs.axis);
-        return SG{ d, 1, { 1, 1, 1 } };
-        //float tmp = lhs.sharpness + rhs.sharpness;
-        //jql::Vec3 axis = lhs.sharpness * lhs.axis + rhs.sharpness * rhs.axis;
-        //axis /= tmp;
-        //return SG{ axis, tmp * jql::length(axis),
-        //           lhs.amplitude * rhs.amplitude *
-        //                   std::expf(tmp * (jql::length(axis) - 1)) };
+        auto s = lhs.sharpness + rhs.sharpness;
+        auto c = (lhs.sharpness * lhs.amplitude + rhs.sharpness *
+                  rhs.amplitude) /s;
+        return SG{ d, s*.5f, c };
+
+        //jql::Vec3 um = (lhs.sharpness * lhs.axis + rhs.sharpness * rhs.axis) /
+        //               (lhs.sharpness + rhs.sharpness);
+        //float umLength = jql::length(um);
+        //float lm = lhs.sharpness + rhs.sharpness;
+
+        //SG res;
+        //res.axis = um * (1.0f / umLength);
+        //res.sharpness = lm * umLength;
+        //res.amplitude =
+        //        lhs.amplitude * rhs.amplitude * exp(lm * (umLength - 1.0f));
+
+        //return res;
 }
 
 VoxelOctree build_voxel_octree(const std::vector<Voxel>& voxels)
@@ -510,7 +522,7 @@ jql::Vec3 cone_trace_light(const VoxelOctree& root, const Cone& cone, float res)
                 }
                 dist += cone.step * diam;
         }
-        return jql::clamp(lightness, 0.f, 1.f);
+        return jql::clamp(2*lightness, 0.f, 1.f);
 }
 
 float cone_trace_ao(const VoxelOctree& root, const Cone& cone, float res)

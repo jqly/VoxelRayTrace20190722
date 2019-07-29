@@ -36,6 +36,8 @@ public:
 
         jql::Vec3 eval(jql::Vec3 d) const
         {
+                if (sharpness < 0)
+                        return {};
                 float tmp = jql::dot(d, axis);
                 return amplitude * std::expf(sharpness * (tmp - 1.f));
         }
@@ -43,7 +45,7 @@ public:
 
 SG dot(const SG& lhs, const SG& rhs);
 
-enum class VoxelType { Object, LightSource };
+enum class VoxelType { Unknown, Object, LightSource };
 
 class Voxel {
 public:

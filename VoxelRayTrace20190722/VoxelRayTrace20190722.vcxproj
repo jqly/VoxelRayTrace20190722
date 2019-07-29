@@ -129,6 +129,7 @@
     <ClInclude Include="voxel_octree.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="camera.cc" />
     <ClCompile Include="main.cc" />
     <ClCompile Include="tiny_obj_loader.cc" />
     <ClCompile Include="tribox2.cc" />

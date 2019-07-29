@@ -7,48 +7,21 @@
 
 static float Res = .01f;
 
-using Color = jql::Mat<std::uint8_t, 3, 1>;
-using FColor = jql::Vec3;
-
-void addi_write_pixel(std::uint8_t* img, int w, int x, int y, Color color)
-{
-        auto* p = &img[3 * (y * w + x)];
-        p[0] += color.x;
-        p[1] += color.y;
-        p[2] += color.z;
-}
-
-void addi_write_pixel(std::uint8_t* img, int w, int x, int y, FColor color)
-{
-        auto* p = &img[3 * (y * w + x)];
-
-        color = jql::clamp<float>(color, 0, .99f);
-
-        p[0] += color.x * 255;
-        p[1] += color.y * 255;
-        p[2] += color.z * 255;
-}
-
-Color read_pixel(std::uint8_t* img, int w, int x, int y)
-{
-        auto* p = &img[3 * (y * w + x)];
-        return { p[0], p[1], p[2] };
-}
-
 jql::Vec3 trace(vo::VoxelOctree& root, const jql::Ray& ray, int depth)
 {
         auto voxel = vo::ray_march(root, ray);
         if (!voxel) {
                 float t = 0.5 * (ray.d.y + 1.0);
                 return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
-                                 jql::Vec3{ 0.5f, 0.7f, 1.0f }, t);
+                                 jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
         }
+        //return voxel->albedo;
         //if (voxel->type == vo::VoxelType::LightSource)
         //        return voxel->albedo;
 
-        //if (voxel->sg.sharpness > 0)
-        //        return voxel->sg.amplitude;
-        //return { 0, 0, 0 };
+        if (voxel->sg.sharpness > 0)
+                return voxel->sg.amplitude;
+        return { 0, 0, 0 };
 
         jql::ISect isect{};
         voxel->aabb.isect(ray, &isect);
@@ -68,53 +41,61 @@ jql::Vec3 trace(vo::VoxelOctree& root, const jql::Ray& ray, int depth)
 
 int main()
 {
-        int W = 1024;
-        int H = 1024;
+        int W = 256;
+        int H = 256;
         float SW = 1.f;
         float SH = 1.f;
+        float FoVy = jql::to_radian(60.f);
 
         auto voxels = vo::obj2voxel(
-                "D:\\jiangqilei\\Documents\\Asset\\lionc\\export\\lionc.obj", Res);
+                "D:\\jiangqilei\\Documents\\Asset\\sponza\\sponza.obj",
+                Res);
+        //auto voxels = vo::obj2voxel(
+        //        "D:\\jiangqilei\\Documents\\Asset\\lionc\\export\\lionc.obj",
+        //        Res);
+
+        jql::print("voxelizer...\n");
         auto root = vo::build_voxel_octree(voxels);
 
-        Sampler sampler{};
-
-        jql::Vec3 LightDir{ 1, 1, 1 };
-        Film shadow_film(1, 1, 1024, 1024);
-        Camera shadow_camera{ { 1.5f, 3.5f, 0 },
-                              { 0, 0, 0 },
-                              { 0, -1, 0 },
-                              jql::to_radian(60.f) };
-        auto shadow_samples =
-                shadow_camera.GenerateSamples(shadow_film, sampler);
-
-        for (auto& sample : shadow_samples) {
-                auto& ray = sample.rays.front();
-                auto voxel = vo::ray_march(root, ray);
-                if (!voxel)
-                        continue;
-                jql::ISect isect{};
-                voxel->aabb.isect(ray, &isect);
-                voxel->sg =
-                        vo::SG{ isect.reflect(-ray.d), 5.f, voxel->albedo };
+        jql::print("light map...\n");
+        Film sfilm(1, 1, 2048, 2048);
+        Camera scam{ jql::to_radian(60),
+                     { 1,10,1},
+                     { 0, 0, 0 },
+                     { 0, 1, 0 } };
+        for (int x = 0; x < sfilm.nx; ++x) {
+                for (int y = 0; y < sfilm.ny; ++y) {
+                        for (const auto& ray : scam.gen_rays4(sfilm, x, y)) {
+                                auto voxel = vo::ray_march(root, ray);
+                                if (!voxel)
+                                        continue;
+                                jql::ISect isect{};
+                                voxel->aabb.isect(ray, &isect);
+                                if (voxel->sg.sharpness > 0)
+                                        voxel->sg = dot(
+                                                voxel->sg,
+                                                vo::SG{ isect.reflect(-ray.d),
+                                                        5.f, voxel->albedo });
+                                else
+                                        voxel->sg =
+                                                vo::SG{ isect.reflect(-ray.d),
+                                                        5.f, voxel->albedo };
+                        }
+                }
         }
-
+        jql::print("filtering...\n");
         vo::voxel_filter(&root);
 
+        jql::print("cone tracing...\n");
+        Camera cam{ FoVy, { .2f,.1f,.2f }, { .1f, .2f, 0 }, { 0, 1, 0 } };
         Film film(SW, SH, W, H);
-        Camera camera{
-                { 3.5f, 0, 0 }, { 0, 0, 0 }, { 0, -1, 0 }, jql::to_radian(60.f)
-        };
-        auto samples = camera.GenerateSamples(film, sampler);
-        for (auto& sample : samples) {
-
-                jql::Vec3 color{};
-                for (const auto& ray : sample.rays) {
-                        auto c = trace(root, ray, 5);
-                        color += c;
+        for (int x = 0; x < film.nx; ++x) {
+                for (int y = 0; y < film.ny; ++y) {
+                        for (const auto& ray : cam.gen_rays4(film, x, y)) {
+                                auto c = trace(root, ray, 5);
+                                film.add(x, y, c*.25f);
+                        }
                 }
-                color *= (1.f / sample.rays.size());
-                film.at(sample.x, sample.y) = color;
         }
 
         auto d = film.to_byte_array();
