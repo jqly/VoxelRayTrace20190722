@@ -19,14 +19,16 @@ jql::Vec3 trace(vo::VoxelOctree& root, const jql::Ray& ray, int depth)
         //if (voxel->type == vo::VoxelType::LightSource)
         //        return voxel->albedo;
 
-        if (voxel->sg.sharpness > 0)
-                return voxel->sg.amplitude;
-        return { 0, 0, 0 };
+        //if (voxel->sg.sharpness > 0)
+        //        return voxel->sg.amplitude;
+        //return { 0, 0, 0 };
 
         jql::ISect isect{};
         voxel->aabb.isect(ray, &isect);
         auto litness = vo::compute_litness(root, isect, Res);
-        return litness;
+        if (voxel->sg.sharpness > 0)
+                litness += voxel->sg.amplitude;
+        return voxel->albedo * litness;
 
         jql::Ray sray;
         jql::Vec3 att;
@@ -41,8 +43,8 @@ jql::Vec3 trace(vo::VoxelOctree& root, const jql::Ray& ray, int depth)
 
 int main()
 {
-        int W = 256;
-        int H = 256;
+        int W = 1024;
+        int H = 1024;
         float SW = 1.f;
         float SH = 1.f;
         float FoVy = jql::to_radian(60.f);
@@ -87,11 +89,14 @@ int main()
         vo::voxel_filter(&root);
 
         jql::print("cone tracing...\n");
-        Camera cam{ FoVy, { .2f,.1f,.2f }, { .1f, .2f, 0 }, { 0, 1, 0 } };
+        Camera cam{ jql::to_radian(90),
+                    { .1f, .1f, 0.f },
+                    { .0f, .1f, 0 },
+                    { 0, 1, 0 } };
         Film film(SW, SH, W, H);
         for (int x = 0; x < film.nx; ++x) {
                 for (int y = 0; y < film.ny; ++y) {
-                        for (const auto& ray : cam.gen_rays4(film, x, y)) {
+                        for (const auto& ray : cam.gen_rays1(film, x, y)) {
                                 auto c = trace(root, ray, 5);
                                 film.add(x, y, c*.25f);
                         }
