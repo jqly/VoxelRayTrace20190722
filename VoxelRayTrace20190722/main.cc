@@ -90,7 +90,7 @@ int main()
 
         jql::print("voxelizer...\n");
         auto voxels = vo::obj2voxel(
-                "D:\\jiangqilei\\Documents\\Asset\\sponza\\sponza.obj", Res);
+                "C:\\Users\\jiangqilei\\source\\repos\\VoxelRayTrace20190722\\Asset\\sponza\\sponza.obj", Res);
         //auto voxels = vo::obj2voxel(
         //        "D:\\jiangqilei\\Documents\\Asset\\lionc\\export\\lionc.obj",
         //        Res);
