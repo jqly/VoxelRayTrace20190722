@@ -3,7 +3,7 @@
 #include "camera.h"
 #include <thread>
 #include <future>
-#include "thread-pool-cpp/thread_pool.hpp"
+#include "thread_pool_cpp/thread_pool.hpp"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"

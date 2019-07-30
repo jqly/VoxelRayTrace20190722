@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <thread>
 #include <future>
-#include "thread-pool-cpp/thread_pool.hpp"
+#include "thread_pool_cpp/thread_pool.hpp"
 #include "graphics_math.h"
 #include "util.h"
 #include "./tiny_obj_loader.h"
