@@ -1,13 +1,16 @@
 #include "voxel_octree.h"
 #include <iostream>
 #include "camera.h"
+#include <thread>
+#include <future>
+#include "thread-pool-cpp/thread_pool.hpp"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
 static float Res = .01f;
 
-jql::Vec3 trace(vo::VoxelOctree& root, const jql::Ray& ray, int depth)
+jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
 {
         auto voxel = vo::ray_march(root, ray);
         if (!voxel) {
@@ -41,50 +44,146 @@ jql::Vec3 trace(vo::VoxelOctree& root, const jql::Ray& ray, int depth)
         }
 }
 
+void test_thread_pool()
+{
+        const unsigned NumWaiters = 1600;
+        std::vector<std::promise<float>> waiters{ NumWaiters };
+        tp::ThreadPool pool;
+        auto begin_count = std::chrono::high_resolution_clock::now()
+                                   .time_since_epoch()
+                                   .count();
+        for (int i = 0; i < waiters.size(); ++i)
+                pool.post([&waiters, i = i]() {
+                        float a = i;
+                        auto v = jql::Vec3{ a, a, a };
+                        auto q = jql::Quat{ (float)i, v };
+                        auto m = jql::Quat2Mat3(q);
+                        for (int i = 0; i < 100000; ++i) {
+                                m = jql::dot(m, m);
+                                m[0] = jql::normalize(m[0]);
+                                m[1] = jql::normalize(m[1]);
+                                m[2] = jql::normalize(m[2]);
+                        }
+                        waiters[i].set_value(jql::value_sum(m));
+                });
+
+        for (auto& waiter : waiters) {
+                auto future = waiter.get_future();
+                future.wait();
+        }
+
+        long long int end_count = std::chrono::high_resolution_clock::now()
+                                          .time_since_epoch()
+                                          .count();
+        std::cout << (double)(end_count - begin_count) / (double)1000000
+                  << " ms" << std::endl;
+}
+
 int main()
 {
+        //test_thread_pool();
         int W = 1024;
         int H = 1024;
         float SW = 1.f;
         float SH = 1.f;
         float FoVy = jql::to_radian(60.f);
 
+        jql::print("voxelizer...\n");
         auto voxels = vo::obj2voxel(
-                "D:\\jiangqilei\\Documents\\Asset\\sponza\\sponza.obj",
-                Res);
+                "D:\\jiangqilei\\Documents\\Asset\\sponza\\sponza.obj", Res);
         //auto voxels = vo::obj2voxel(
         //        "D:\\jiangqilei\\Documents\\Asset\\lionc\\export\\lionc.obj",
         //        Res);
 
-        jql::print("voxelizer...\n");
+        jql::print("octree...\n");
         auto root = vo::build_voxel_octree(voxels);
 
-        jql::print("light map...\n");
-        Film sfilm(1, 1, 2048, 2048);
-        Camera scam{ jql::to_radian(60),
-                     { 1,10,1},
-                     { 0, 0, 0 },
-                     { 0, 1, 0 } };
-        for (int x = 0; x < sfilm.nx; ++x) {
-                for (int y = 0; y < sfilm.ny; ++y) {
-                        for (const auto& ray : scam.gen_rays4(sfilm, x, y)) {
-                                auto voxel = vo::ray_march(root, ray);
-                                if (!voxel)
-                                        continue;
-                                jql::ISect isect{};
-                                voxel->aabb.isect(ray, &isect);
-                                if (voxel->sg.sharpness > 0)
-                                        voxel->sg = dot(
-                                                voxel->sg,
-                                                vo::SG{ isect.reflect(-ray.d),
-                                                        5.f, voxel->albedo });
-                                else
-                                        voxel->sg =
-                                                vo::SG{ isect.reflect(-ray.d),
-                                                        5.f, voxel->albedo };
+        {
+                jql::print("light map...\n");
+                const int W = 2048;
+                const int H = 2048;
+                const int partw = 8;
+                const int parth = 8;
+                const int subimgw = W / partw;
+                const int subimgh = H / parth;
+                Film sfilm(1, 1, W, H);
+                Camera scam{ jql::to_radian(60),
+                             { 1, 10, 1 },
+                             { 0, 0, 0 },
+                             { 0, 1, 0 } };
+                std::vector<std::promise<void>> waiters{ partw * parth };
+                tp::ThreadPool pool;
+
+                for (int ph = 0; ph < parth; ++ph) {
+                        for (int pw = 0; pw < partw; ++pw) {
+                                pool.post([&root, &scam, &waiters, pw, ph,
+                                           partw, parth, &sfilm, subimgw,
+                                           subimgh]() {
+                                        for (int x = pw * subimgw;
+                                             x < pw * subimgw + subimgw; ++x) {
+                                                for (int y = ph * subimgh;
+                                                     y < ph * subimgh + subimgh;
+                                                     ++y) {
+                                                        for (const auto& ray :
+                                                             scam.gen_rays4(
+                                                                     sfilm, x,
+                                                                     y)) {
+                                                                auto voxel = vo::ray_march(
+                                                                        root,
+                                                                        ray);
+                                                                if (!voxel)
+                                                                        continue;
+                                                                jql::ISect
+                                                                        isect{};
+                                                                voxel->aabb.isect(
+                                                                        ray,
+                                                                        &isect);
+                                                                if (voxel->sg.sharpness >
+                                                                    0)
+                                                                        voxel->sg = dot(
+                                                                                voxel->sg,
+                                                                                vo::SG{ isect.reflect(
+                                                                                                -ray.d),
+                                                                                        5.f,
+                                                                                        voxel->albedo });
+                                                                else
+                                                                        voxel->sg = vo::SG{
+                                                                                isect.reflect(
+                                                                                        -ray.d),
+                                                                                5.f,
+                                                                                voxel->albedo
+                                                                        };
+                                                        }
+                                                }
+                                        }
+                                        waiters[ph * partw + pw].set_value();
+                                });
                         }
                 }
+                for (auto& waiter : waiters)
+                        waiter.get_future().wait();
         }
+
+        //for (int x = 0; x < sfilm.nx; ++x) {
+        //        for (int y = 0; y < sfilm.ny; ++y) {
+        //                for (const auto& ray : scam.gen_rays4(sfilm, x, y)) {
+        //                        auto voxel = vo::ray_march(root, ray);
+        //                        if (!voxel)
+        //                                continue;
+        //                        jql::ISect isect{};
+        //                        voxel->aabb.isect(ray, &isect);
+        //                        if (voxel->sg.sharpness > 0)
+        //                                voxel->sg = dot(
+        //                                        voxel->sg,
+        //                                        vo::SG{ isect.reflect(-ray.d),
+        //                                                5.f, voxel->albedo });
+        //                        else
+        //                                voxel->sg =
+        //                                        vo::SG{ isect.reflect(-ray.d),
+        //                                                5.f, voxel->albedo };
+        //                }
+        //        }
+        //}
         jql::print("filtering...\n");
         vo::voxel_filter(&root);
 
@@ -94,14 +193,53 @@ int main()
                     { .0f, .1f, 0 },
                     { 0, 1, 0 } };
         Film film(SW, SH, W, H);
-        for (int x = 0; x < film.nx; ++x) {
-                for (int y = 0; y < film.ny; ++y) {
-                        for (const auto& ray : cam.gen_rays1(film, x, y)) {
-                                auto c = trace(root, ray, 5);
-                                film.add(x, y, c*.25f);
+
+        {
+                const int partw = 4;
+                const int parth = 4;
+                const int subimgw = W / partw;
+                const int subimgh = H / parth;
+                std::vector<std::promise<void>> waiters{ partw * parth };
+                tp::ThreadPool pool;
+
+                for (int ph = 0; ph < parth; ++ph) {
+                        for (int pw = 0; pw < partw; ++pw) {
+                                pool.post([&root, &cam, &waiters, pw, ph, partw,
+                                           parth, &film, subimgw, subimgh]() {
+                                        for (int x = pw * subimgw;
+                                             x < pw * subimgw + subimgw; ++x) {
+                                                for (int y = ph * subimgh;
+                                                     y < ph * subimgh + subimgh;
+                                                     ++y) {
+                                                        for (const auto& ray :
+                                                             cam.gen_rays1(film,
+                                                                           x,
+                                                                           y)) {
+                                                                auto c = trace(
+                                                                        root,
+                                                                        ray, 5);
+                                                                film.add(
+                                                                        x, y,
+                                                                        c * .25f);
+                                                        }
+                                                }
+                                        }
+                                        waiters[ph * partw + pw].set_value();
+                                });
                         }
                 }
+                for (auto& waiter : waiters)
+                        waiter.get_future().wait();
         }
+
+        //for (int x = 0; x < film.nx; ++x) {
+        //        for (int y = 0; y < film.ny; ++y) {
+        //                for (const auto& ray : cam.gen_rays1(film, x, y)) {
+        //                        auto c = trace(root, ray, 5);
+        //                        film.add(x, y, c * .25f);
+        //                }
+        //        }
+        //}
 
         auto d = film.to_byte_array();
         stbi_write_bmp("./test.bmp", W, H, 3, d.data());

@@ -3,6 +3,9 @@
 #include <stack>
 #include <unordered_set>
 #include <unordered_map>
+#include <thread>
+#include <future>
+#include "thread-pool-cpp/thread_pool.hpp"
 #include "graphics_math.h"
 #include "util.h"
 #include "./tiny_obj_loader.h"
@@ -142,7 +145,7 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                         assert(fv == 3);
                         std::vector<jql::Vec3> tri{ fv };
                         for (size_t v = 0; v < fv; ++v) {
-                                auto idx = mesh.indices[index_offset + v];
+                                auto idx = mesh.indices[f * 3 + v];
                                 std::copy_n(
                                         &attrib.vertices[3 * idx.vertex_index],
                                         3, jql::begin(tri[v]));
@@ -307,22 +310,10 @@ SG dot(const SG& lhs, const SG& rhs)
 {
         auto d = jql::normalize(lhs.axis + rhs.axis);
         auto s = lhs.sharpness + rhs.sharpness;
-        auto c = (lhs.sharpness * lhs.amplitude + rhs.sharpness *
-                  rhs.amplitude) /s;
-        return SG{ d, s*.5f, c };
-
-        //jql::Vec3 um = (lhs.sharpness * lhs.axis + rhs.sharpness * rhs.axis) /
-        //               (lhs.sharpness + rhs.sharpness);
-        //float umLength = jql::length(um);
-        //float lm = lhs.sharpness + rhs.sharpness;
-
-        //SG res;
-        //res.axis = um * (1.0f / umLength);
-        //res.sharpness = lm * umLength;
-        //res.amplitude =
-        //        lhs.amplitude * rhs.amplitude * exp(lm * (umLength - 1.0f));
-
-        //return res;
+        auto c = (lhs.sharpness * lhs.amplitude +
+                  rhs.sharpness * rhs.amplitude) /
+                 s;
+        return SG{ d, s * .5f, c };
 }
 
 VoxelOctree build_voxel_octree(const std::vector<Voxel>& voxels)
@@ -522,7 +513,7 @@ jql::Vec3 cone_trace_light(const VoxelOctree& root, const Cone& cone, float res)
                 }
                 dist += cone.step * diam;
         }
-        return jql::clamp(2*lightness, 0.f, 1.f);
+        return jql::clamp(2 * lightness, 0.f, 1.f);
 }
 
 float cone_trace_ao(const VoxelOctree& root, const Cone& cone, float res)
