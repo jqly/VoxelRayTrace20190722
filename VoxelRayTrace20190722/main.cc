@@ -17,6 +17,20 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
                 float t = 0.5 * (ray.d.y + 1.0);
                 return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f }, jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
         }
+
+        if (voxel->type == vo::VoxelType::LightProbe) {
+
+                jql::Ray probe_ray{ voxel->aabb.center(), voxel->normal, jql::length(voxel->aabb.size()) };
+
+                auto voxel2 = vo::ray_march(root, probe_ray);
+                if (!voxel2)
+                        return {};
+                jql::ISect isect{};
+                voxel2->aabb.isect(probe_ray, &isect);
+                auto litness = vo::compute_litness(root, isect, Res);
+                return litness + voxel2->litness;
+        }
+
         //return voxel->albedo;
         //if (voxel->type == vo::VoxelType::LightSource)
         //        return voxel->albedo;
@@ -26,6 +40,7 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
         jql::ISect isect{};
         voxel->aabb.isect(ray, &isect);
         auto litness = vo::compute_litness(root, isect, Res);
+        //return litness;
         return voxel->litness + voxel->albedo * litness;
 
         jql::Ray sray;
@@ -169,9 +184,8 @@ int main()
         //}
 
         auto d = film.to_float_array();
-        jql::print("{},{},{}=={}\n", W, H, d.size(), W*H*3);
+        jql::print("{},{},{}=={}\n", W, H, d.size(), W * H * 3);
         stbi_write_hdr("./test.hdr", W, H, 3, d.data());
 
         return 0;
 }
- 

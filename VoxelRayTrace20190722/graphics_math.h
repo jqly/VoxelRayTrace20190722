@@ -1129,14 +1129,14 @@ public:
         float tmax;
 
         Ray() = default;
-        Ray(Vec3 o, Vec3 d)
-                : o{ o }
-                , d{ normalize(d) }
-                , tmin{ 0 }
-                , tmax{ std::numeric_limits<float>::max() }
-        {
-        }
-        Ray(Vec3 o, Vec3 d, float tmin, float tmax)
+        //Ray(Vec3 o, Vec3 d)
+        //        : o{ o }
+        //        , d{ normalize(d) }
+        //        , tmin{ 0 }
+        //        , tmax{ std::numeric_limits<float>::max() }
+        //{
+        //}
+        Ray(Vec3 o, Vec3 d, float tmin = 0.f, float tmax = std::numeric_limits<float>::max())
                 : o{ o }
                 , d{ normalize(d) }
                 , tmin{ tmin }

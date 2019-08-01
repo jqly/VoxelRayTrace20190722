@@ -185,14 +185,22 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
 
                         // Tinyobj has per-face material.
                         jql::Vec4 color{};
-                        jql::Vec3 normal{};
+                        jql::Vec3 normal{1,1,1};
                         VoxelType type;
 
                         const auto& mtl = materials[mesh.material_ids[f]];
-                        if (mtl.unknown_parameter.find("lightsource") !=
+                        if (mtl.unknown_parameter.find("lightprobe") != mtl.unknown_parameter.end()) {
+                                type = VoxelType::LightProbe;
+                                std::copy_n(mtl.diffuse, 3, jql::begin(color));
+                                auto idx = mesh.indices[index_offset + 0];
+                                std::copy_n(&attrib.normals[3 * idx.normal_index], 3, jql::begin(normal));
+                        }
+                        else if (mtl.unknown_parameter.find("lightsource") !=
                             mtl.unknown_parameter.end()) {
                                 type = VoxelType::LightSource;
                                 std::copy_n(mtl.diffuse, 3, jql::begin(color));
+                                auto idx = mesh.indices[index_offset + 0];
+                                std::copy_n(&attrib.normals[3 * idx.normal_index], 3, jql::begin(normal));
                         }
                         else if (!mtl.diffuse_texname.empty()) {
                                 type = VoxelType::Object;
@@ -222,7 +230,12 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                         else {
                                 type = VoxelType::Unknown;
                                 std::copy_n(mtl.diffuse, 3, jql::begin(color));
+                                auto idx = mesh.indices[index_offset + 0];
+                                std::copy_n(&attrib.normals[3 * idx.normal_index], 3, jql::begin(normal));
                         }
+
+                        normal = jql::normalize(normal);
+
                         auto trivoxmap = trivox(tri, voxel_size);
                         for (auto& trivox : trivoxmap) {
                                 trivox.second.albedo =

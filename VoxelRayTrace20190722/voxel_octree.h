@@ -42,7 +42,7 @@ public:
 SG prod(const SG& lhs, const SG& rhs);
 Vec3 inner_prod(const SG& lhs, const SG& rhs);
 
-enum class VoxelType { Unknown, Object, LightSource, Probe };
+enum class VoxelType { Unknown, Object, LightSource, LightProbe };
 
 class Voxel {
 public:
