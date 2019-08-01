@@ -30,10 +30,10 @@ std::vector<std::uint8_t> Film::to_byte_array() const
         for (int y = 0; y < ny; ++y) {
                 for (int x = 0; x < nx; ++x) {
                         auto rawv = get(x, y);
-                        std::transform(jql::begin(rawv), jql::end(rawv),
-                                       jql::begin(rawv), [](auto v) {
-                                               return std::powf(v, .5f);
-                                       });
+                        //std::transform(jql::begin(rawv), jql::end(rawv),
+                        //               jql::begin(rawv), [](auto v) {
+                        //                       return std::powf(v, .5f);
+                        //               });
                         auto v = rawv * 255.9f;
                         auto idx = (y * nx + x) * 3;
                         d[idx + 0] =
@@ -42,6 +42,21 @@ std::vector<std::uint8_t> Film::to_byte_array() const
                                 static_cast<std::uint8_t>(v.y);
                         d[idx + 2] =
                                 static_cast<std::uint8_t>(v.z);
+                }
+        }
+        return d;
+}
+
+std::vector<float> Film::to_float_array() const
+{
+        std::vector<float> d(nx * ny * 3);
+        for (int y = 0; y < ny; ++y) {
+                for (int x = 0; x < nx; ++x) {
+                        auto v = get(x, y);
+                        auto idx = (y * nx + x) * 3;
+                        d[idx + 0] = v.x;
+                        d[idx + 1] = v.y;
+                        d[idx + 2] = v.z;
                 }
         }
         return d;

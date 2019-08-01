@@ -16,6 +16,38 @@
 namespace vo
 {
 
+SG::SG(Vec3 a, Vec3 d, float s)
+        : a{ a }
+        , d{ jql::normalize(d) }
+        , s{ s }
+{
+}
+Vec3 SG::eval(Vec3 dir) const
+{
+        float tmp = jql::dot(dir, d);
+        return a * std::expf(s * (tmp - 1));
+}
+Vec3 SG::integral() const
+{
+        float tmp = 1.0f - exp(-2.0f * s);
+        return 2 * jql::pi * (a / s) * tmp;
+}
+SG prod(const SG& lhs, const SG& rhs)
+{
+        Vec3 d = (lhs.s * lhs.d + rhs.s * rhs.d) / (lhs.s + rhs.s);
+        float dl = jql::length(d);
+        float lm = lhs.s + rhs.s;
+
+        return { lhs.a * rhs.a * std::expf(lm * (dl - 1)), d, lm * dl };
+}
+Vec3 inner_prod(const SG& lhs, const SG& rhs)
+{
+        float uml = jql::length(lhs.s * lhs.d + rhs.s * rhs.d);
+        Vec3 expo = std::expf(uml - lhs.s - rhs.s) * lhs.a * rhs.a;
+        float other = 1.0f - std::expf(-2.0f * uml);
+        return (2.0f * jql::pi * expo * other) / uml;
+}
+
 jql::PCG Voxel::pcg{ 0xc01dbeef };
 
 class Image {
@@ -197,6 +229,7 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                                         jql::cast<jql::Vec3>(color);
                                 trivox.second.normal = normal;
                                 trivox.second.type = type;
+                                trivox.second.litness = jql::Vec3{};
                                 auto p = voxmap.find(trivox.first);
                                 if (p == voxmap.end()) {
                                         voxmap.insert(trivox);
@@ -245,7 +278,7 @@ void split(VoxelOctree* root)
         }
 }
 
-void insert(VoxelOctree* root, const Voxel* voxel)
+void insert(VoxelOctree* root, Voxel* voxel)
 {
         if (!jql::aabb_is_intersect(root->aabb, voxel->aabb))
                 return;
@@ -264,7 +297,7 @@ void insert(VoxelOctree* root, const Voxel* voxel)
         split(root);
         assert(!root->is_leaf());
         assert(root->voxels.size() == 1);
-        const Voxel* old_voxel = root->voxels.front();
+        Voxel* old_voxel = root->voxels.front();
         root->voxels.clear();
         for (int i = 0; i < 8; ++i) {
                 insert(root->children[i].get(), old_voxel);
@@ -281,42 +314,20 @@ float voxel_filter(VoxelOctree* root)
                         return root->opacity = 0.f;
                 else {
                         for (auto& voxel : root->voxels)
-                                if (voxel->sg.sharpness > 0) {
-                                        if (root->sg.sharpness > 0)
-                                                root->sg = dot(root->sg,
-                                                               voxel->sg);
-                                        else
-                                                root->sg = voxel->sg;
-                                }
-
+                                root->litness += voxel->litness;
                         return root->opacity = 1.f;
                 }
         }
         root->opacity = 0;
         for (int i = 0; i < 8; ++i) {
                 root->opacity += voxel_filter(root->children[i].get());
-
-                if (root->children[i]->sg.sharpness > 0) {
-                        if (root->sg.sharpness > 0)
-                                root->sg = dot(root->sg, root->children[i]->sg);
-                        else
-                                root->sg = root->children[i]->sg;
-                }
+                root->litness += root->children[i]->litness;
         }
+        root->litness /= 8;
         return root->opacity /= 8;
 }
 
-SG dot(const SG& lhs, const SG& rhs)
-{
-        auto d = jql::normalize(lhs.axis + rhs.axis);
-        auto s = lhs.sharpness + rhs.sharpness;
-        auto c = (lhs.sharpness * lhs.amplitude +
-                  rhs.sharpness * rhs.amplitude) /
-                 s;
-        return SG{ d, s * .5f, c };
-}
-
-VoxelOctree build_voxel_octree(const std::vector<Voxel>& voxels)
+VoxelOctree build_voxel_octree(std::vector<Voxel>& voxels)
 {
         jql::AABB3D aabb{};
         for (auto& vox : voxels)
@@ -350,7 +361,7 @@ void travorder(const VoxelOctree& root, const jql::Ray& ray, int ord[8])
         return;
 }
 
-const Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray)
+Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray)
 {
         if (!root.aabb.isect(ray, nullptr))
                 return nullptr;
@@ -498,22 +509,13 @@ jql::Vec3 cone_trace_light(const VoxelOctree& root, const Cone& cone, float res)
                 if (split_level == 0) {
                         float a = (1.f / (1 + .1f * dist)) * prob->opacity *
                                   cone.step;
-                        auto tmp = prob->sg.eval(-cone.d);
-                        //jql::print("color: {}\n", tmp);
+                        auto tmp = (1.f - opacity) * prob->opacity * prob->litness;
                         lightness += prob->opacity * tmp;
-                        //jql::print("opacity: {}\n", prob->opacity);
-                        ////jql::print("a: {}\n", a);
-                        //if (std::abs(tmp.x - tmp.y) > .1f) {
-                        //        jql::print("opacity: {}\n", opacity);
-                        //        jql::print("tmp: {}\n", tmp);
-                        //        jql::print("litness: {}\n", lightness);
-                        //}
-
                         opacity += (1.f - opacity) * a;
                 }
                 dist += cone.step * diam;
         }
-        return jql::clamp(2 * lightness, 0.f, 1.f);
+        return lightness;
 }
 
 float cone_trace_ao(const VoxelOctree& root, const Cone& cone, float res)
@@ -564,11 +566,10 @@ jql::Vec3 compute_litness(const VoxelOctree& root, const jql::ISect& isect,
                 auto d = jql::cast<jql::Vec3>(HemiCones[i]);
                 const float weight = HemiCones[i].w;
                 cone.d = jql::normalize(jql::dot(tangent_to_uvw, d));
-                ao += weight * cone_trace_ao(root, cone, res);
+                //ao += weight * cone_trace_ao(root, cone, res);
                 litness += weight * cone_trace_light(root, cone, res);
         }
 
-        return jql::clamp(litness, 0.f, 1.f);
-        //return jql::clamp(jql::Vec3{1-ao,1-ao,1-ao},0.f,1.f);
+        return litness;
 }
 }

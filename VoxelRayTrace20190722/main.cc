@@ -15,23 +15,18 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
         auto voxel = vo::ray_march(root, ray);
         if (!voxel) {
                 float t = 0.5 * (ray.d.y + 1.0);
-                return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
-                                 jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
+                return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f }, jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
         }
         //return voxel->albedo;
         //if (voxel->type == vo::VoxelType::LightSource)
         //        return voxel->albedo;
 
-        //if (voxel->sg.sharpness > 0)
-        //        return voxel->sg.amplitude;
-        //return { 0, 0, 0 };
+        //return voxel->litness;
 
         jql::ISect isect{};
         voxel->aabb.isect(ray, &isect);
         auto litness = vo::compute_litness(root, isect, Res);
-        if (voxel->sg.sharpness > 0)
-                litness += voxel->sg.amplitude;
-        return voxel->albedo * litness;
+        return voxel->litness + voxel->albedo * litness;
 
         jql::Ray sray;
         jql::Vec3 att;
@@ -49,9 +44,7 @@ void test_thread_pool()
         const unsigned NumWaiters = 1600;
         std::vector<std::promise<float>> waiters{ NumWaiters };
         tp::ThreadPool pool;
-        auto begin_count = std::chrono::high_resolution_clock::now()
-                                   .time_since_epoch()
-                                   .count();
+        auto begin_count = std::chrono::high_resolution_clock::now().time_since_epoch().count();
         for (int i = 0; i < waiters.size(); ++i)
                 pool.post([&waiters, i = i]() {
                         float a = i;
@@ -72,11 +65,8 @@ void test_thread_pool()
                 future.wait();
         }
 
-        long long int end_count = std::chrono::high_resolution_clock::now()
-                                          .time_since_epoch()
-                                          .count();
-        std::cout << (double)(end_count - begin_count) / (double)1000000
-                  << " ms" << std::endl;
+        long long int end_count = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+        std::cout << (double)(end_count - begin_count) / (double)1000000 << " ms" << std::endl;
 }
 
 int main()
@@ -107,52 +97,23 @@ int main()
                 const int subimgw = W / partw;
                 const int subimgh = H / parth;
                 Film sfilm(1, 1, W, H);
-                Camera scam{ jql::to_radian(60),
-                             { 1, 10, 1 },
-                             { 0, 0, 0 },
-                             { 0, 1, 0 } };
+                Camera scam{ jql::to_radian(60), { 1, 10, 1 }, { 0, 0, 0 }, { 0, 1, 0 } };
                 std::vector<std::promise<void>> waiters{ partw * parth };
                 tp::ThreadPool pool;
 
                 for (int ph = 0; ph < parth; ++ph) {
                         for (int pw = 0; pw < partw; ++pw) {
-                                pool.post([&root, &scam, &waiters, pw, ph,
-                                           partw, parth, &sfilm, subimgw,
-                                           subimgh]() {
-                                        for (int x = pw * subimgw;
-                                             x < pw * subimgw + subimgw; ++x) {
-                                                for (int y = ph * subimgh;
-                                                     y < ph * subimgh + subimgh;
-                                                     ++y) {
-                                                        for (const auto& ray :
-                                                             scam.gen_rays4(
-                                                                     sfilm, x,
-                                                                     y)) {
-                                                                auto voxel = vo::ray_march(
-                                                                        root,
-                                                                        ray);
+                                pool.post([&root, &scam, &waiters, pw, ph, partw, parth, &sfilm, subimgw, subimgh]() {
+                                        for (int x = pw * subimgw; x < pw * subimgw + subimgw; ++x) {
+                                                for (int y = ph * subimgh; y < ph * subimgh + subimgh; ++y) {
+                                                        for (const auto& ray : scam.gen_rays4(sfilm, x, y)) {
+                                                                auto voxel = vo::ray_march(root, ray);
                                                                 if (!voxel)
                                                                         continue;
-                                                                jql::ISect
-                                                                        isect{};
-                                                                voxel->aabb.isect(
-                                                                        ray,
-                                                                        &isect);
-                                                                if (voxel->sg.sharpness >
-                                                                    0)
-                                                                        voxel->sg = dot(
-                                                                                voxel->sg,
-                                                                                vo::SG{ isect.reflect(
-                                                                                                -ray.d),
-                                                                                        5.f,
-                                                                                        voxel->albedo });
-                                                                else
-                                                                        voxel->sg = vo::SG{
-                                                                                isect.reflect(
-                                                                                        -ray.d),
-                                                                                5.f,
-                                                                                voxel->albedo
-                                                                        };
+                                                                jql::ISect isect{};
+                                                                voxel->aabb.isect(ray, &isect);
+                                                                voxel->litness += voxel->albedo *
+                                                                                  (jql::dot(voxel->normal, -ray.d));
                                                         }
                                                 }
                                         }
@@ -164,34 +125,11 @@ int main()
                         waiter.get_future().wait();
         }
 
-        //for (int x = 0; x < sfilm.nx; ++x) {
-        //        for (int y = 0; y < sfilm.ny; ++y) {
-        //                for (const auto& ray : scam.gen_rays4(sfilm, x, y)) {
-        //                        auto voxel = vo::ray_march(root, ray);
-        //                        if (!voxel)
-        //                                continue;
-        //                        jql::ISect isect{};
-        //                        voxel->aabb.isect(ray, &isect);
-        //                        if (voxel->sg.sharpness > 0)
-        //                                voxel->sg = dot(
-        //                                        voxel->sg,
-        //                                        vo::SG{ isect.reflect(-ray.d),
-        //                                                5.f, voxel->albedo });
-        //                        else
-        //                                voxel->sg =
-        //                                        vo::SG{ isect.reflect(-ray.d),
-        //                                                5.f, voxel->albedo };
-        //                }
-        //        }
-        //}
         jql::print("filtering...\n");
         vo::voxel_filter(&root);
 
         jql::print("cone tracing...\n");
-        Camera cam{ jql::to_radian(90),
-                    { .1f, .1f, 0.f },
-                    { .0f, .1f, 0 },
-                    { 0, 1, 0 } };
+        Camera cam{ jql::to_radian(90), { .1f, .1f, 0.f }, { .0f, .1f, 0 }, { 0, 1, 0 } };
         Film film(SW, SH, W, H);
 
         {
@@ -204,23 +142,12 @@ int main()
 
                 for (int ph = 0; ph < parth; ++ph) {
                         for (int pw = 0; pw < partw; ++pw) {
-                                pool.post([&root, &cam, &waiters, pw, ph, partw,
-                                           parth, &film, subimgw, subimgh]() {
-                                        for (int x = pw * subimgw;
-                                             x < pw * subimgw + subimgw; ++x) {
-                                                for (int y = ph * subimgh;
-                                                     y < ph * subimgh + subimgh;
-                                                     ++y) {
-                                                        for (const auto& ray :
-                                                             cam.gen_rays1(film,
-                                                                           x,
-                                                                           y)) {
-                                                                auto c = trace(
-                                                                        root,
-                                                                        ray, 5);
-                                                                film.add(
-                                                                        x, y,
-                                                                        c * .25f);
+                                pool.post([&root, &cam, &waiters, pw, ph, partw, parth, &film, subimgw, subimgh]() {
+                                        for (int x = pw * subimgw; x < pw * subimgw + subimgw; ++x) {
+                                                for (int y = ph * subimgh; y < ph * subimgh + subimgh; ++y) {
+                                                        for (const auto& ray : cam.gen_rays1(film, x, y)) {
+                                                                auto c = trace(root, ray, 5);
+                                                                film.add(x, y, c * .25f);
                                                         }
                                                 }
                                         }
@@ -241,8 +168,10 @@ int main()
         //        }
         //}
 
-        auto d = film.to_byte_array();
-        stbi_write_bmp("./test.bmp", W, H, 3, d.data());
+        auto d = film.to_float_array();
+        jql::print("{},{},{}=={}\n", W, H, d.size(), W*H*3);
+        stbi_write_hdr("./test.hdr", W, H, 3, d.data());
 
         return 0;
 }
+ 

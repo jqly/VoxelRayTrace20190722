@@ -29,6 +29,7 @@ public:
         void set(int x, int y, const Vec3& color);
         void add(int x, int y, const Vec3& color);
         std::vector<std::uint8_t> to_byte_array() const;
+        std::vector<float> to_float_array() const;
 
 private:
         std::vector<Vec3> data_;

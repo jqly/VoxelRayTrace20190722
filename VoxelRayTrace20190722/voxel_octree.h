@@ -11,49 +11,46 @@
 #include "./graphics_math.h"
 #include "./util.h"
 
+using jql::Vec2;
+using jql::iVec2;
+using jql::Vec3;
+using jql::iVec3;
+using jql::Vec4;
+using jql::iVec4;
+using jql::Mat4;
+using jql::iMat4;
+using jql::Mat3;
+using jql::iMat3;
+using jql::Ray;
+using jql::AABB3D;
+
 namespace vo
 {
 
 class SG {
 public:
-        jql::Vec3 axis;
-        float sharpness = -1;
-        jql::Vec3 amplitude;
+        Vec3 a;
+        Vec3 d;
+        float s;
 
-        SG()
-                : axis{ 0, 0, 0 }
-                , sharpness{ -1 }
-                , amplitude{ 0, 0, 0 }
-        {
-        }
-
-        SG(jql::Vec3 axis, float sharpness, jql::Vec3 amplitude)
-                : axis{ jql::normalize(axis) }
-                , sharpness{ sharpness }
-                , amplitude{ amplitude }
-        {
-        }
-
-        jql::Vec3 eval(jql::Vec3 d) const
-        {
-                if (sharpness < 0)
-                        return {};
-                float tmp = jql::dot(d, axis);
-                return amplitude * std::expf(sharpness * (tmp - 1.f));
-        }
+        SG() = default;
+        SG(Vec3 a, Vec3 d, float s);
+        Vec3 eval(Vec3 dir) const;
+        Vec3 integral() const;
 };
 
-SG dot(const SG& lhs, const SG& rhs);
+SG prod(const SG& lhs, const SG& rhs);
+Vec3 inner_prod(const SG& lhs, const SG& rhs);
 
-enum class VoxelType { Unknown, Object, LightSource };
+enum class VoxelType { Unknown, Object, LightSource, Probe };
 
 class Voxel {
 public:
         VoxelType type;
-        jql::AABB3D aabb;
-        jql::Vec3 albedo;
-        jql::Vec3 normal;
-        mutable SG sg{};
+        AABB3D aabb;
+        Vec3 albedo;
+        Vec3 normal;
+        Vec3 litness;
 
         bool scatter(const jql::Ray& iray, const jql::ISect& isect,
                      jql::Vec3* att, jql::Ray* sray) const;
@@ -65,20 +62,22 @@ std::vector<Voxel> obj2voxel(const std::string& filepath, float voxel_size);
 class VoxelOctree {
 public:
         jql::AABB3D aabb;
-        std::vector<const Voxel*> voxels;
+        std::vector<Voxel*> voxels;
         std::unique_ptr<VoxelOctree> children[8];
         float opacity = -1.f;
-        SG sg{};
+        Vec3 D; // normal. sigma^2=(1-D)/D.
+        Vec3 litness;
+        Vec3 albedo;
 
         VoxelOctree(const jql::AABB3D& aabb);
 
         bool is_leaf() const;
 };
 
-VoxelOctree build_voxel_octree(const std::vector<Voxel>& voxels);
+VoxelOctree build_voxel_octree(std::vector<Voxel>& voxels);
 float voxel_filter(VoxelOctree* root);
 
-const Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray);
+Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray);
 
 jql::Vec3 compute_litness(const VoxelOctree& root, const jql::ISect& isect,
                           float res);
