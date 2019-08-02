@@ -15,12 +15,14 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
         auto voxel = vo::ray_march(root, ray);
         if (!voxel) {
                 float t = 0.5 * (ray.d.y + 1.0);
-                return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f }, jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
+                return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
+                                 jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
         }
 
         if (voxel->type == vo::VoxelType::LightProbe) {
 
-                jql::Ray probe_ray{ voxel->aabb.center(), voxel->normal, jql::length(voxel->aabb.size()) };
+                jql::Ray probe_ray{ voxel->aabb.center(), voxel->normal,
+                                    jql::length(voxel->aabb.size()) };
 
                 auto voxel2 = vo::ray_march(root, probe_ray);
                 if (!voxel2)
@@ -59,7 +61,9 @@ void test_thread_pool()
         const unsigned NumWaiters = 1600;
         std::vector<std::promise<float>> waiters{ NumWaiters };
         tp::ThreadPool pool;
-        auto begin_count = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+        auto begin_count = std::chrono::high_resolution_clock::now()
+                                   .time_since_epoch()
+                                   .count();
         for (int i = 0; i < waiters.size(); ++i)
                 pool.post([&waiters, i = i]() {
                         float a = i;
@@ -80,8 +84,11 @@ void test_thread_pool()
                 future.wait();
         }
 
-        long long int end_count = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-        std::cout << (double)(end_count - begin_count) / (double)1000000 << " ms" << std::endl;
+        long long int end_count = std::chrono::high_resolution_clock::now()
+                                          .time_since_epoch()
+                                          .count();
+        std::cout << (double)(end_count - begin_count) / (double)1000000
+                  << " ms" << std::endl;
 }
 
 int main()
@@ -95,7 +102,8 @@ int main()
 
         jql::print("voxelizer...\n");
         auto voxels = vo::obj2voxel(
-                "C:\\Users\\jiangqilei\\source\\repos\\VoxelRayTrace20190722\\Asset\\sponza\\sponza.obj", Res);
+                "C:\\Users\\jiangqilei\\source\\repos\\VoxelRayTrace20190722\\Asset\\sponza\\sponza.obj",
+                Res);
         //auto voxels = vo::obj2voxel(
         //        "D:\\jiangqilei\\Documents\\Asset\\lionc\\export\\lionc.obj",
         //        Res);
@@ -112,23 +120,42 @@ int main()
                 const int subimgw = W / partw;
                 const int subimgh = H / parth;
                 Film sfilm(1, 1, W, H);
-                Camera scam{ jql::to_radian(60), { 1, 10, 1 }, { 0, 0, 0 }, { 0, 1, 0 } };
+                Camera scam{ jql::to_radian(60),
+                             { 1, 10, 1 },
+                             { 0, 0, 0 },
+                             { 0, 1, 0 } };
                 std::vector<std::promise<void>> waiters{ partw * parth };
                 tp::ThreadPool pool;
 
                 for (int ph = 0; ph < parth; ++ph) {
                         for (int pw = 0; pw < partw; ++pw) {
-                                pool.post([&root, &scam, &waiters, pw, ph, partw, parth, &sfilm, subimgw, subimgh]() {
-                                        for (int x = pw * subimgw; x < pw * subimgw + subimgw; ++x) {
-                                                for (int y = ph * subimgh; y < ph * subimgh + subimgh; ++y) {
-                                                        for (const auto& ray : scam.gen_rays4(sfilm, x, y)) {
-                                                                auto voxel = vo::ray_march(root, ray);
+                                pool.post([&root, &scam, &waiters, pw, ph,
+                                           partw, parth, &sfilm, subimgw,
+                                           subimgh]() {
+                                        for (int x = pw * subimgw;
+                                             x < pw * subimgw + subimgw; ++x) {
+                                                for (int y = ph * subimgh;
+                                                     y < ph * subimgh + subimgh;
+                                                     ++y) {
+                                                        for (const auto& ray :
+                                                             scam.gen_rays4(
+                                                                     sfilm, x,
+                                                                     y)) {
+                                                                auto voxel = vo::ray_march(
+                                                                        root,
+                                                                        ray);
                                                                 if (!voxel)
                                                                         continue;
-                                                                jql::ISect isect{};
-                                                                voxel->aabb.isect(ray, &isect);
-                                                                voxel->litness += voxel->albedo *
-                                                                                  (jql::dot(voxel->normal, -ray.d));
+                                                                jql::ISect
+                                                                        isect{};
+                                                                voxel->aabb.isect(
+                                                                        ray,
+                                                                        &isect);
+                                                                voxel->litness +=
+                                                                        voxel->albedo *
+                                                                        (jql::dot(
+                                                                                voxel->normal,
+                                                                                -ray.d));
                                                         }
                                                 }
                                         }
@@ -144,7 +171,10 @@ int main()
         vo::voxel_filter(&root);
 
         jql::print("cone tracing...\n");
-        Camera cam{ jql::to_radian(90), { .1f, .1f, 0.f }, { .0f, .1f, 0 }, { 0, 1, 0 } };
+        Camera cam{ jql::to_radian(90),
+                    { .1f, .1f, 0.f },
+                    { .0f, .1f, 0 },
+                    { 0, 1, 0 } };
         Film film(SW, SH, W, H);
 
         {
@@ -157,12 +187,23 @@ int main()
 
                 for (int ph = 0; ph < parth; ++ph) {
                         for (int pw = 0; pw < partw; ++pw) {
-                                pool.post([&root, &cam, &waiters, pw, ph, partw, parth, &film, subimgw, subimgh]() {
-                                        for (int x = pw * subimgw; x < pw * subimgw + subimgw; ++x) {
-                                                for (int y = ph * subimgh; y < ph * subimgh + subimgh; ++y) {
-                                                        for (const auto& ray : cam.gen_rays1(film, x, y)) {
-                                                                auto c = trace(root, ray, 5);
-                                                                film.add(x, y, c * .25f);
+                                pool.post([&root, &cam, &waiters, pw, ph, partw,
+                                           parth, &film, subimgw, subimgh]() {
+                                        for (int x = pw * subimgw;
+                                             x < pw * subimgw + subimgw; ++x) {
+                                                for (int y = ph * subimgh;
+                                                     y < ph * subimgh + subimgh;
+                                                     ++y) {
+                                                        for (const auto& ray :
+                                                             cam.gen_rays1(film,
+                                                                           x,
+                                                                           y)) {
+                                                                auto c = trace(
+                                                                        root,
+                                                                        ray, 5);
+                                                                film.add(
+                                                                        x, y,
+                                                                        c * .25f);
                                                         }
                                                 }
                                         }

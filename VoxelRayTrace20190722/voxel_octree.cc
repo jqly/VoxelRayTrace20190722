@@ -185,22 +185,27 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
 
                         // Tinyobj has per-face material.
                         jql::Vec4 color{};
-                        jql::Vec3 normal{1,1,1};
+                        jql::Vec3 normal{ 1, 1, 1 };
                         VoxelType type;
 
                         const auto& mtl = materials[mesh.material_ids[f]];
-                        if (mtl.unknown_parameter.find("lightprobe") != mtl.unknown_parameter.end()) {
+                        if (mtl.unknown_parameter.find("lightprobe") !=
+                            mtl.unknown_parameter.end()) {
                                 type = VoxelType::LightProbe;
                                 std::copy_n(mtl.diffuse, 3, jql::begin(color));
                                 auto idx = mesh.indices[index_offset + 0];
-                                std::copy_n(&attrib.normals[3 * idx.normal_index], 3, jql::begin(normal));
+                                std::copy_n(
+                                        &attrib.normals[3 * idx.normal_index],
+                                        3, jql::begin(normal));
                         }
                         else if (mtl.unknown_parameter.find("lightsource") !=
-                            mtl.unknown_parameter.end()) {
+                                 mtl.unknown_parameter.end()) {
                                 type = VoxelType::LightSource;
                                 std::copy_n(mtl.diffuse, 3, jql::begin(color));
                                 auto idx = mesh.indices[index_offset + 0];
-                                std::copy_n(&attrib.normals[3 * idx.normal_index], 3, jql::begin(normal));
+                                std::copy_n(
+                                        &attrib.normals[3 * idx.normal_index],
+                                        3, jql::begin(normal));
                         }
                         else if (!mtl.diffuse_texname.empty()) {
                                 type = VoxelType::Object;
@@ -231,7 +236,9 @@ std::vector<Voxel> vo::obj2voxel(const std::string& filepath, float voxel_size)
                                 type = VoxelType::Unknown;
                                 std::copy_n(mtl.diffuse, 3, jql::begin(color));
                                 auto idx = mesh.indices[index_offset + 0];
-                                std::copy_n(&attrib.normals[3 * idx.normal_index], 3, jql::begin(normal));
+                                std::copy_n(
+                                        &attrib.normals[3 * idx.normal_index],
+                                        3, jql::begin(normal));
                         }
 
                         normal = jql::normalize(normal);
@@ -522,7 +529,8 @@ jql::Vec3 cone_trace_light(const VoxelOctree& root, const Cone& cone, float res)
                 if (split_level == 0) {
                         float a = (1.f / (1 + .1f * dist)) * prob->opacity *
                                   cone.step;
-                        auto tmp = (1.f - opacity) * prob->opacity * prob->litness;
+                        auto tmp =
+                                (1.f - opacity) * prob->opacity * prob->litness;
                         lightness += prob->opacity * tmp;
                         opacity += (1.f - opacity) * a;
                 }
