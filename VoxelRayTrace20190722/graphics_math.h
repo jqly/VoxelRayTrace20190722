@@ -1089,6 +1089,7 @@ inline int quadratic_solver(float a, float b, float c, float* t1, float* t2)
                 tmp = -b + std::sqrt(delta);
         float t1_ = tmp / (2 * a);
         float t2_ = (2 * c) / tmp;
+
         if (t1)
                 *t1 = std::min(t1_, t2_);
         if (t2)
@@ -1136,7 +1137,8 @@ public:
         //        , tmax{ std::numeric_limits<float>::max() }
         //{
         //}
-        Ray(Vec3 o, Vec3 d, float tmin = 0.f, float tmax = std::numeric_limits<float>::max())
+        Ray(Vec3 o, Vec3 d, float tmin = 0.f,
+            float tmax = std::numeric_limits<float>::max())
                 : o{ o }
                 , d{ normalize(d) }
                 , tmin{ tmin }
@@ -1153,27 +1155,35 @@ public:
 
 inline bool sphere_ray_isect(const Sphere& s, const Ray& ray, float* t)
 {
-        auto b = 2.f * dot(ray.o - s.o, ray.d);
-        auto c = dot(ray.o - s.o, ray.o - s.o) - s.r * s.r;
-        auto delta = b * b - 4 * c;
-        if (delta <= eps)
+        float a = 1.f;
+        Vec3 tmp = ray.o - s.o;
+        float b = 2.f * dot(tmp, ray.d);
+        float c = dot(tmp, tmp) - s.r * s.r;
+
+        float t1{};
+        float t2{};
+
+        int det = quadratic_solver(a, b, c, &t1, &t2);
+
+        if (det == 0)
                 return false;
 
-        delta = std::sqrtf(delta);
-        auto t1 = std::min(.5f * (-b - delta), .5f * (-b + delta));
-        auto t2 = std::max(.5f * (-b - delta), .5f * (-b + delta));
-
-        if (t2 < eps)
+        if (t2 < 0)
                 return false;
 
-        float tmin = 0;
-        if (t1 >= eps)
-                tmin = t1;
+        if (!t)
+                return t2 >= 0;
+
+        if (t1 >= 0) {
+                *t = t1;
+                return true;
+        }
+        else if (t2 >= 0) {
+                *t = t2;
+                return true;
+        }
         else
-                tmin = t2;
-        if (t)
-                *t = tmin;
-        return true;
+                return false;
 }
 
 // Axis Aligned Bounding Box

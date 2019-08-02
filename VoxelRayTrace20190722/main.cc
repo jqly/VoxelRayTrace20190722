@@ -10,8 +10,19 @@
 
 static float Res = .01f;
 
+static std::vector<vo::LightProbe> probes;
+
 jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
 {
+        // Drawback: probe disregard physical occlusions.
+        for (auto& probe : probes) {
+                float t{};
+                if (probe.isectt(ray, &t)) {
+                        auto dir = jql::normalize(ray.o + t * ray.d - probe.o);
+                        return probe.eval(dir);
+                }
+        }
+
         auto voxel = vo::ray_march(root, ray);
         if (!voxel) {
                 float t = 0.5 * (ray.d.y + 1.0);
@@ -19,19 +30,19 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
                                  jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
         }
 
-        if (voxel->type == vo::VoxelType::LightProbe) {
+        //if (voxel->type == vo::VoxelType::LightProbe) {
 
-                jql::Ray probe_ray{ voxel->aabb.center(), voxel->normal,
-                                    jql::length(voxel->aabb.size()) };
+        //        jql::Ray probe_ray{ voxel->aabb.center(), voxel->normal,
+        //                            jql::length(voxel->aabb.size()) };
 
-                auto voxel2 = vo::ray_march(root, probe_ray);
-                if (!voxel2)
-                        return {};
-                jql::ISect isect{};
-                voxel2->aabb.isect(probe_ray, &isect);
-                auto litness = vo::compute_litness(root, isect, Res);
-                return litness + voxel2->litness;
-        }
+        //        auto voxel2 = vo::ray_march(root, probe_ray);
+        //        if (!voxel2)
+        //                return {};
+        //        jql::ISect isect{};
+        //        voxel2->aabb.isect(probe_ray, &isect);
+        //        auto litness = vo::compute_litness(root, isect, Res);
+        //        return litness + voxel2->litness;
+        //}
 
         //return voxel->albedo;
         //if (voxel->type == vo::VoxelType::LightSource)
@@ -110,7 +121,7 @@ int main()
 
         jql::print("octree...\n");
         auto root = vo::build_voxel_octree(voxels);
-
+        Vec3 light_dir = jql::normalize(Vec3{ 1, 10, 1 });
         {
                 jql::print("light map...\n");
                 const int W = 2048;
@@ -153,9 +164,9 @@ int main()
                                                                         &isect);
                                                                 voxel->litness +=
                                                                         voxel->albedo *
-                                                                        (jql::dot(
+                                                                        jql::clamp(jql::dot(
                                                                                 voxel->normal,
-                                                                                -ray.d));
+                                                                                -ray.d), 0.f,1.f);
                                                         }
                                                 }
                                         }
@@ -170,10 +181,17 @@ int main()
         jql::print("filtering...\n");
         vo::voxel_filter(&root);
 
+        jql::print("light probing...\n");
+
+        for (int i = 0; i < 3; ++i) {
+                probes.push_back({ Vec3{ .5f - .6f * i, .4f, -.15f }, .2f });
+                probes.back().gather_light(root, Res, light_dir);
+        }
+
         jql::print("cone tracing...\n");
         Camera cam{ jql::to_radian(90),
-                    { .1f, .1f, 0.f },
-                    { .0f, .1f, 0 },
+                    { 1.f, 1.3f, -.2f },
+                    { .0f, .4f, 0 },
                     { 0, 1, 0 } };
         Film film(SW, SH, W, H);
 
@@ -225,7 +243,6 @@ int main()
         //}
 
         auto d = film.to_float_array();
-        jql::print("{},{},{}=={}\n", W, H, d.size(), W * H * 3);
         stbi_write_hdr("./test.hdr", W, H, 3, d.data());
 
         return 0;

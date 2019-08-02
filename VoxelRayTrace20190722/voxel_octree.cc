@@ -25,7 +25,8 @@ SG::SG(Vec3 a, Vec3 d, float s)
 Vec3 SG::eval(Vec3 dir) const
 {
         float tmp = jql::dot(dir, d);
-        return a * std::expf(s * (tmp - 1));
+        auto ret = a * std::expf(s * (tmp - 1));
+        return ret;
 }
 Vec3 SG::integral() const
 {
@@ -478,7 +479,8 @@ public:
         // tan half aperture.
         // tan(pi/6) = sqrt(3)/3
         static constexpr float aperture = 0.577350269f;
-        static constexpr float step = .5f;
+        static constexpr float step = .1f;
+        static constexpr float litness_decay = 1.f;
 };
 
 static constexpr jql::Vec4 HemiCones[] = {
@@ -527,15 +529,16 @@ jql::Vec3 cone_trace_light(const VoxelOctree& root, const Cone& cone, float res)
                         split_level--;
                 }
                 if (split_level == 0) {
-                        float a = (1.f / (1 + .1f * dist)) * prob->opacity *
-                                  cone.step;
-                        auto tmp =
-                                (1.f - opacity) * prob->opacity * prob->litness;
-                        lightness += prob->opacity * tmp;
-                        opacity += (1.f - opacity) * a;
+                        auto transparency = jql::clamp(1.f - opacity, 0.f, 1.f);
+                        float a = prob->opacity * cone.step;
+                        lightness += (1.f / (1 + cone.litness_decay * dist)) *
+                                     transparency * prob->opacity *
+                                     prob->litness;
+                        opacity += transparency * a;
                 }
                 dist += cone.step * diam;
         }
+
         return lightness;
 }
 
