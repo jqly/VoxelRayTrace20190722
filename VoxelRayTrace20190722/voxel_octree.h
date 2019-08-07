@@ -73,7 +73,8 @@ public:
 void ray_march_init(VoxelOctree* root, std::vector<VoxelBase*>& voxels,
                     int max_depth);
 bool ray_march(VoxelOctree* root, const Ray& ray, VoxelOctree** leaf_ptr,
-               VoxelBase** voxel_ptr, ISect* isect, bool even_invisible = false);
+               VoxelBase** voxel_ptr, ISect* isect,
+               bool even_invisible = false);
 void cone_trace_init_filter(VoxelOctree* root);
 Vec3 cone_trace(const VoxelOctree& root, const ISect& isect,
                 float min_voxel_size);
@@ -130,7 +131,8 @@ public:
         Vec3 get_albedo(const jql::ISect& isect) const override;
         bool is_overlap(const AABB3D& aabb) const override;
         bool is_visible() const override;
-        void gather_light(VoxelOctree* root, float res, Vec3 light_dir);
+        void gather_light(VoxelOctree* root, float res, Vec3 light_dir,
+                          Vec3 light_color);
         Vec3 eval(Vec3 dir) const;
 
 private:
@@ -144,6 +146,8 @@ private:
                                  { 1, 1, 1 },   { 1, 1, -1 },  { 1, -1, 1 },
                                  { 1, -1, -1 }, { -1, 1, 1 },  { -1, 1, -1 },
                                  { -1, -1, 1 }, { -1, -1, -1 } };
+        jql::PCG pcg_;
+        std::vector<Vec3> random_points_in_sphere_;
 };
 }
 

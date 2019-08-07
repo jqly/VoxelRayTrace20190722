@@ -12,6 +12,7 @@
 #include <ostream>
 #include <cassert>
 #include <iostream>
+#include <random>
 
 namespace jql
 {
@@ -1202,6 +1203,16 @@ inline bool sphere_ray_isect(const Sphere& s, const Ray& ray, float* t)
         }
         else
                 return false;
+}
+
+inline Vec3 random_point_in_unit_sphere(PCG& pcg_)
+{
+        while (true) {
+                auto d = std::uniform_real_distribution<float>{ -1, 1 };
+                Vec3 r{ d(pcg_), d(pcg_), d(pcg_) };
+                if (jql::length(r) < 1.f)
+                        return r;
+        }
 }
 
 // Axis Aligned Bounding Box

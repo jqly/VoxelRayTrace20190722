@@ -519,10 +519,16 @@ Vec3 inner_prod(const SG& lhs, const SG& rhs)
         float other = 1.0f - std::expf(-2.0f * uml);
         return (2.0f * jql::pi * expo * other) / uml;
 }
+
 LightProbe::LightProbe(Vec3 o, float r)
         : o_{ o }
         , r_{ r }
+        , pcg_{ 0xc01dbeef }
 {
+        for (int i = 0; i < 100; ++i) {
+                auto r = jql::random_point_in_unit_sphere(pcg_);
+                random_points_in_sphere_.push_back(r);
+        }
 }
 
 AABB3D LightProbe::get_aabb() const
@@ -576,44 +582,40 @@ bool LightProbe::is_visible() const
 {
         return false;
 }
-void LightProbe::gather_light(VoxelOctree* root, float res, Vec3 light_dir)
+void LightProbe::gather_light(VoxelOctree* root, float res, Vec3 light_dir,
+                              Vec3 light_color)
 {
         for (int i = 0; i < 14; ++i) {
 
                 auto dir = dirs_[i];
 
-                // for each directions, we sample 4 rays around.
-                Vec3 litness_avg{};
+                Vec3 litness{};
+                for (auto r : random_points_in_sphere_) {
+                        Vec3 rd = r + dir * 2.6131f;
 
-                const Quat qs[4]{
-                        Quat::angle_axis(jql::to_radian(5), Vec3{ 1, 0, 0 }),
-                        Quat::angle_axis(jql::to_radian(-4), Vec3{ 0, 1, 0 }),
-                        Quat::angle_axis(jql::to_radian(2), Vec3{ 0, 0, 1 }),
-                        Quat::angle_axis(jql::to_radian(-4), Vec3{ 1, 1, 1 })
-                };
-
-                for (int s = 0; s < 4; ++s) {
-                        auto& q = qs[s];
-                        auto r_ = jql::rotate(q, dir);
-
-                        Ray ray{ o_, r_ };
+                        Ray ray{ o_, rd, r_+res };
                         VoxelOctree* leaf_ptr;
                         VoxelBase* voxel_ptr;
                         ISect isect;
                         if (!ray_march(root, ray, &leaf_ptr, &voxel_ptr,
                                        &isect)) {
-                                auto litness = jql::dot(light_dir, ray.d);
-                                litness = jql::clamp(litness, 0.f, 1.f);
-                                litness_avg += .25f * litness;
+                                litness += light_color;
                                 continue;
                         }
-                        voxel_ptr->isect(ray, &isect);
-                        auto litness = cone_trace(*root, isect, res);
-                        litness_avg += .25f * litness;
+                        float t = jql::length(isect.hit - o_)/res;
+                        litness += std::expf(-t*.2f)*cone_trace(*root, isect, res);
                 }
-
-                sgs_[i] = SG{ litness_avg, dir, 10 };
+                litness /= (float)random_points_in_sphere_.size();
+                sgs_[i] = SG{ litness, dir, 10 };
         }
+        float integral{};
+        for (int i = 0; i < 14; ++i)
+                integral += jql::length(sgs_[i].integral());
+        light_color /= integral;
+        for (int i = 0; i < 14; ++i)
+                sgs_[i].a *= light_color;
+
+
 }
 Vec3 LightProbe::eval(Vec3 dir) const
 {

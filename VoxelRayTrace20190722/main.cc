@@ -27,7 +27,8 @@ jql::Vec3 trace(gi::VoxelOctree& root, const jql::Ray& ray, int depth,
         gi::VoxelOctree* leaf_ptr{};
         gi::VoxelBase* voxel_ptr{};
         ISect isect{};
-        if (!gi::ray_march(&root, ray, &leaf_ptr, &voxel_ptr, &isect, even_invisible)) {
+        if (!gi::ray_march(&root, ray, &leaf_ptr, &voxel_ptr, &isect,
+                           even_invisible)) {
                 float t = 0.5 * (ray.d.y + 1.0);
                 return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
                                  jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
@@ -134,8 +135,10 @@ int main()
                 voxel_ptrs.push_back(&voxel);
 
         std::vector<gi::LightProbe> probes;
-        for (int i = 0; i < 3; ++i) {
-                probes.push_back({ Vec3{ .5f - .6f * i, .4f, -.15f }, .2f });
+        jql::PCG pcg{ 0xc01dbeefdeadbead };
+        for (int i = 0; i < 100; ++i) {
+                Vec3 rp = jql::random_point_in_unit_sphere(pcg);
+                probes.push_back({ Vec3{ .5f + rp.x, .4f + rp.y, rp.z }, .1f });
         }
 
         for (auto& voxel : probes)
@@ -215,8 +218,8 @@ int main()
 
         jql::print("light probing...\n");
 
-        for (int i = 0; i < 3; ++i) {
-                probes[i].gather_light(&root, Res, light_dir);
+        for (auto& probe : probes) {
+                probe.gather_light(&root, Res, light_dir, root.diffuse);
         }
 
         std::vector<gi::LightProbe*> probe_ptrs;
@@ -253,7 +256,8 @@ int main()
                                                                            y)) {
                                                                 auto c = trace(
                                                                         root,
-                                                                        ray, 5, true);
+                                                                        ray, 5,
+                                                                        true);
                                                                 film.add(
                                                                         x, y,
                                                                         c * .25f);
