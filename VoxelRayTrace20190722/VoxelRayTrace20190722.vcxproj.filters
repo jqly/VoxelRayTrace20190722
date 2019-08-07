@@ -42,6 +42,9 @@
     <ClInclude Include="thread-pool-cpp\thread_pool\worker.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="raytri.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="tiny_obj_loader.cc">
@@ -57,6 +60,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="camera.cc">
+      <Filter>头文件</Filter>
+    </ClCompile>
+    <ClCompile Include="raytri.cc">
       <Filter>头文件</Filter>
     </ClCompile>
   </ItemGroup>

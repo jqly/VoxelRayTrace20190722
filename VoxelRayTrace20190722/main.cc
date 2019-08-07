@@ -10,25 +10,29 @@
 
 static float Res = .01f;
 
-static std::vector<vo::LightProbe> probes;
+//static std::vector<vo::LightProbe> probes;
 
-jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
+jql::Vec3 trace(gi::VoxelOctree& root, const jql::Ray& ray, int depth)
 {
-        // Drawback: probe disregard physical occlusions.
-        for (auto& probe : probes) {
-                float t{};
-                if (probe.isectt(ray, &t)) {
-                        auto dir = jql::normalize(ray.o + t * ray.d - probe.o);
-                        return probe.eval(dir);
-                }
-        }
+        //// Drawback: probe disregard physical occlusions.
+        //for (auto& probe : probes) {
+        //        float t{};
+        //        if (probe.isectt(ray, &t)) {
+        //                auto dir = jql::normalize(ray.o + t * ray.d - probe.o);
+        //                return probe.eval(dir);
+        //        }
+        //}
 
-        auto voxel = vo::ray_march(root, ray);
-        if (!voxel) {
+        gi::VoxelOctree* leaf_ptr{};
+        gi::VoxelBase* voxel_ptr{};
+        ISect isect{};
+        if (!gi::ray_march(&root, ray, &leaf_ptr, &voxel_ptr, &isect)) {
                 float t = 0.5 * (ray.d.y + 1.0);
                 return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
                                  jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
         }
+
+        //return leaf_ptr->diffuse;
 
         //if (voxel->type == vo::VoxelType::LightProbe) {
 
@@ -48,14 +52,15 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
         //if (voxel->type == vo::VoxelType::LightSource)
         //        return voxel->albedo;
 
-        //return voxel->litness;
-
-        jql::ISect isect{};
-        voxel->aabb.isect(ray, &isect);
-        auto litness = vo::compute_litness(root, isect, Res);
+        //return voxel_ptr->get_diffuse();
+        ////return voxel_ptr->get_albedo(isect);
+        ////return .5f*(1+isect.normal);
+        auto litness = gi::cone_trace(root, isect, Res);
         //return litness;
-        return voxel->litness + voxel->albedo * litness;
-
+        return voxel_ptr->get_albedo(isect) * (litness + leaf_ptr->diffuse);
+        //return voxel_ptr->get_diffuse() +
+        //       voxel_ptr->get_albedo(isect) * litness;
+        /*
         jql::Ray sray;
         jql::Vec3 att;
         if (depth > 0 && voxel->scatter(ray, isect, &att, &sray)) {
@@ -64,7 +69,7 @@ jql::Vec3 trace(const vo::VoxelOctree& root, const jql::Ray& ray, int depth)
         }
         else {
                 return { 0, 0, 0 };
-        }
+        }*/
 }
 
 void test_thread_pool()
@@ -112,15 +117,28 @@ int main()
         float FoVy = jql::to_radian(60.f);
 
         jql::print("voxelizer...\n");
-        auto voxels = vo::obj2voxel(
+
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+
+        auto voxels = gi::obj2voxel(
                 "C:\\Users\\jiangqilei\\source\\repos\\VoxelRayTrace20190722\\Asset\\sponza\\sponza.obj",
-                Res);
-        //auto voxels = vo::obj2voxel(
-        //        "D:\\jiangqilei\\Documents\\Asset\\lionc\\export\\lionc.obj",
-        //        Res);
+                &attrib, &shapes, &materials);
 
         jql::print("octree...\n");
-        auto root = vo::build_voxel_octree(voxels);
+
+        std::vector<gi::VoxelBase*> voxel_ptrs;
+        for (auto& voxel : voxels)
+                voxel_ptrs.push_back(&voxel);
+
+        gi::VoxelOctree root;
+        gi::ray_march_init(&root, voxel_ptrs, 6);
+
+        auto res = root.aabb.size() / std::powf(2.f, 6.f);
+        Res = *std::min_element(jql::begin(res), jql::end(res));
+        jql::print("Res={}\n", Res);
+
         Vec3 light_dir = jql::normalize(Vec3{ 1, 10, 1 });
         {
                 jql::print("light map...\n");
@@ -152,21 +170,27 @@ int main()
                                                              scam.gen_rays4(
                                                                      sfilm, x,
                                                                      y)) {
-                                                                auto voxel = vo::ray_march(
-                                                                        root,
-                                                                        ray);
-                                                                if (!voxel)
-                                                                        continue;
+                                                                gi::VoxelOctree*
+                                                                        leaf_ptr{};
                                                                 jql::ISect
                                                                         isect{};
-                                                                voxel->aabb.isect(
-                                                                        ray,
-                                                                        &isect);
-                                                                voxel->litness +=
-                                                                        voxel->albedo *
-                                                                        jql::clamp(jql::dot(
-                                                                                voxel->normal,
-                                                                                -ray.d), 0.f,1.f);
+                                                                gi::VoxelBase*
+                                                                        voxel_ptr{};
+                                                                if (!gi::ray_march(
+                                                                            &root,
+                                                                            ray,
+                                                                            &leaf_ptr,
+                                                                            &voxel_ptr,
+                                                                            &isect))
+                                                                        continue;
+                                                                leaf_ptr->diffuse +=
+                                                                        voxel_ptr
+                                                                                ->get_diffuse(
+                                                                                        isect,
+                                                                                        ray,
+                                                                                        Vec3{ .5,
+                                                                                              .5,
+                                                                                              .5 });
                                                         }
                                                 }
                                         }
@@ -179,14 +203,14 @@ int main()
         }
 
         jql::print("filtering...\n");
-        vo::voxel_filter(&root);
+        gi::cone_trace_init_filter(&root);
 
-        jql::print("light probing...\n");
+        //jql::print("light probing...\n");
 
-        for (int i = 0; i < 3; ++i) {
-                probes.push_back({ Vec3{ .5f - .6f * i, .4f, -.15f }, .2f });
-                probes.back().gather_light(root, Res, light_dir);
-        }
+        //for (int i = 0; i < 3; ++i) {
+        //        probes.push_back({ Vec3{ .5f - .6f * i, .4f, -.15f }, .2f });
+        //        probes.back().gather_light(root, Res, light_dir);
+        //}
 
         jql::print("cone tracing...\n");
         Camera cam{ jql::to_radian(90),
@@ -196,8 +220,8 @@ int main()
         Film film(SW, SH, W, H);
 
         {
-                const int partw = 4;
-                const int parth = 4;
+                const int partw = 8;
+                const int parth = 8;
                 const int subimgw = W / partw;
                 const int subimgh = H / parth;
                 std::vector<std::promise<void>> waiters{ partw * parth };
@@ -213,7 +237,7 @@ int main()
                                                      y < ph * subimgh + subimgh;
                                                      ++y) {
                                                         for (const auto& ray :
-                                                             cam.gen_rays1(film,
+                                                             cam.gen_rays4(film,
                                                                            x,
                                                                            y)) {
                                                                 auto c = trace(
@@ -243,7 +267,7 @@ int main()
         //}
 
         auto d = film.to_float_array();
-        stbi_write_hdr("./test.hdr", W, H, 3, d.data());
-
+        stbi_write_hdr("./test2.hdr", W, H, 3, d.data());
+        jql::print("success.\n");
         return 0;
 }

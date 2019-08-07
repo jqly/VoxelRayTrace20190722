@@ -121,6 +121,7 @@
   <ItemGroup>
     <ClInclude Include="camera.h" />
     <ClInclude Include="graphics_math.h" />
+    <ClInclude Include="raytri.h" />
     <ClInclude Include="stb_image.h" />
     <ClInclude Include="stb_image_write.h" />
     <ClInclude Include="thread-pool-cpp\thread_pool\worker.hpp" />
@@ -132,6 +133,7 @@
   <ItemGroup>
     <ClCompile Include="camera.cc" />
     <ClCompile Include="main.cc" />
+    <ClCompile Include="raytri.cc" />
     <ClCompile Include="tiny_obj_loader.cc" />
     <ClCompile Include="tribox2.cc" />
     <ClCompile Include="voxel_octree.cc" />

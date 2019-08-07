@@ -11,6 +11,7 @@
 #include <string>
 #include <ostream>
 #include <cassert>
+#include <iostream>
 
 namespace jql
 {
@@ -1074,6 +1075,29 @@ inline Vec3 vector_transform(const Mat4& transform, const Vec3 vector)
         return cast<Vec3>(vector_);
 }
 
+// https://gamedev.stackexchange.com/a/23745
+// Compute barycentric coordinates (u, v, w) for
+// point p with respect to triangle (a, b, c)
+inline Vec3 barycentric(Vec3 p, Vec3 a, Vec3 b, Vec3 c)
+{
+        Vec3 v0 = b - a, v1 = c - a, v2 = p - a;
+        float d00 = jql::dot(v0, v0);
+        float d01 = jql::dot(v0, v1);
+        float d11 = jql::dot(v1, v1);
+        float d20 = jql::dot(v2, v0);
+        float d21 = jql::dot(v2, v1);
+        float denom = d00 * d11 - d01 * d01;
+        if (denom == 0) {
+                std::cerr << "0 area triangle.\n";
+                return {};
+        }
+        Vec3 bc{};
+        bc.y = (d11 * d20 - d01 * d21) / denom;
+        bc.z = (d00 * d21 - d01 * d20) / denom;
+        bc.x = 1.0f - bc.y - bc.z;
+        return bc;
+}
+
 // Solvers
 
 // ax^2+bx+c=0
@@ -1130,13 +1154,7 @@ public:
         float tmax;
 
         Ray() = default;
-        //Ray(Vec3 o, Vec3 d)
-        //        : o{ o }
-        //        , d{ normalize(d) }
-        //        , tmin{ 0 }
-        //        , tmax{ std::numeric_limits<float>::max() }
-        //{
-        //}
+
         Ray(Vec3 o, Vec3 d, float tmin = 0.f,
             float tmax = std::numeric_limits<float>::max())
                 : o{ o }

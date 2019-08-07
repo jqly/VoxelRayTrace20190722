@@ -7,9 +7,13 @@
 #include <cmath>
 #include <memory>
 #include <random>
+#include <unordered_map>
 #include <stack>
+#include "./tiny_obj_loader.h"
 #include "./graphics_math.h"
 #include "./util.h"
+#include "./tribox2.h"
+#include "./raytri.h"
 
 using jql::Vec2;
 using jql::iVec2;
@@ -22,159 +26,81 @@ using jql::iMat4;
 using jql::Mat3;
 using jql::iMat3;
 using jql::Ray;
+using jql::ISect;
 using jql::AABB3D;
 using jql::Quat;
 
-namespace vo
+namespace gi
 {
 
-class SG {
+class VoxelBase {
 public:
-        Vec3 a;
-        Vec3 d;
-        float s;
+        virtual AABB3D get_aabb() const = 0;
+        virtual bool isect(const Ray& ray, jql::ISect* isect) const = 0;
+        virtual Vec3 get_diffuse(const ISect& isect, const Ray& ray,
+                                 const Vec3& color) = 0;
+        virtual Vec3 get_albedo(const jql::ISect& isect) const = 0;
+        virtual bool is_overlap(const AABB3D& aabb) const = 0;
 
-        SG() = default;
-        SG(Vec3 a, Vec3 d, float s);
-        Vec3 eval(Vec3 dir) const;
-        Vec3 integral() const;
-};
-
-SG prod(const SG& lhs, const SG& rhs);
-Vec3 inner_prod(const SG& lhs, const SG& rhs);
-
-enum class VoxelType { Unknown, Object, LightSource, LightProbe };
-
-class Voxel {
 public:
-        VoxelType type;
-        AABB3D aabb;
-        Vec3 albedo;
-        Vec3 normal;
-        Vec3 litness;
+        struct Tex {
+                std::vector<unsigned char> data;
+                int width;
+                int height;
+                int channels;
+        };
 
-        bool scatter(const jql::Ray& iray, const jql::ISect& isect,
-                     jql::Vec3* att, jql::Ray* sray) const;
-        static jql::PCG pcg;
+protected:
+        static Vec4 texel_fetch(std::string name, Vec2 coord);
+
+private:
+        static std::unordered_map<std::string, Tex> texs_;
 };
-
-std::vector<Voxel> obj2voxel(const std::string& filepath, float voxel_size);
 
 class VoxelOctree {
 public:
-        jql::AABB3D aabb;
-        std::vector<Voxel*> voxels;
+        // For ray march.
+        AABB3D aabb{};
+        std::vector<VoxelBase*> voxels;
         std::unique_ptr<VoxelOctree> children[8];
-        float opacity = -1.f;
-        Vec3 D; // normal. sigma^2=(1-D)/D.
-        Vec3 litness;
-        Vec3 albedo;
-
-        VoxelOctree(const jql::AABB3D& aabb);
-
-        bool is_leaf() const;
+        // For cone trace.
+        float coverage{};
+        Vec3 diffuse{};
+        int depth{};
 };
 
-VoxelOctree build_voxel_octree(std::vector<Voxel>& voxels);
-float voxel_filter(VoxelOctree* root);
+void ray_march_init(VoxelOctree* root, std::vector<VoxelBase*>& voxels,
+                    int max_depth);
+bool ray_march(VoxelOctree* root, const Ray& ray, VoxelOctree** leaf_ptr,
+               VoxelBase** voxel_ptr, ISect* isect);
+void cone_trace_init_filter(VoxelOctree* root);
+Vec3 cone_trace(const VoxelOctree& root, const ISect& isect,
+                float min_voxel_size);
 
-Voxel* ray_march(const VoxelOctree& root, const jql::Ray& ray);
-
-jql::Vec3 compute_litness(const VoxelOctree& root, const jql::ISect& isect,
-                          float res);
-
-class LightProbe {
+class Triangle : public VoxelBase {
 public:
-        const Vec3 o;
-        const float r;
+        Triangle(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 n0, Vec3 n1, Vec3 n2, Vec2 t0,
+                 Vec2 t1, Vec2 t2, tinyobj::material_t* mtl);
 
-        LightProbe(Vec3 o, float r)
-                : o{ o }
-                , r{ r }
-        {
-                ;
-        }
-
-        void gather_light(const vo::VoxelOctree& root, float res,
-                          Vec3 light_dir)
-        {
-                for (int i = 0; i < 14; ++i) {
-
-                        auto dir = dirs_[i];
-
-                        // for each directions, we sample 4 rays around.
-                        Vec3 litness_avg{};
-
-                        const Quat qs[4]{ Quat::angle_axis(jql::to_radian(5),
-                                                           Vec3{ 1, 0, 0 }),
-                                          Quat::angle_axis(jql::to_radian(-4),
-                                                           Vec3{ 0, 1, 0 }),
-                                          Quat::angle_axis(jql::to_radian(2),
-                                                           Vec3{ 0, 0, 1 }),
-                                          Quat::angle_axis(jql::to_radian(-4),
-                                                           Vec3{ 1, 1, 1 }) };
-
-                        for (int s = 0; s < 4; ++s) {
-                                auto& q = qs[s];
-                                auto r_ = jql::rotate(q, dir);
-
-                                Ray ray{ o, r_ };
-                                Voxel* voxel = ray_march(root, ray);
-                                if (!voxel) {
-                                        auto litness =
-                                                jql::dot(light_dir, ray.d);
-                                        litness = jql::clamp(litness, 0.f, 1.f);
-                                        litness_avg += .25f * litness;
-                                        continue;
-                                }
-                                jql::ISect isect{};
-                                voxel->aabb.isect(ray, &isect);
-                                auto litness =
-                                        compute_litness(root, isect, res);
-                                litness_avg += .25f * litness;
-                        }
-
-                        sgs_[i] = SG{ litness_avg, dir, 10 };
-                        
-                }
-        }
-
-        bool isectt(const Ray& ray, float* t)
-        {
-                if (jql::sphere_ray_isect({ o, r }, ray, t)) {
-                        return true;
-                }
-                return false;
-        }
-
-        bool isect(const Ray& ray, jql::ISect* isect)
-        {
-                float t{};
-                if (jql::sphere_ray_isect({ o, r }, ray, &t)) {
-                        *isect =
-                                jql::ISect{ ray.o + t * ray.d, isect->hit - o };
-                        return true;
-                }
-                return false;
-        }
-
-        Vec3 eval(Vec3 dir)
-        {
-                Vec3 litness{};
-                for (auto& sg : sgs_)
-                        litness += sg.eval(dir);
-                return litness;
-        }
+        AABB3D get_aabb() const override;
+        bool isect(const Ray& ray, jql::ISect* isect) const override;
+        Vec3 get_diffuse(const ISect& isect, const Ray& light,
+                         const Vec3& color) override;
+        Vec3 get_albedo(const jql::ISect& isect) const;
+        bool is_overlap(const AABB3D& aabb) const override;
 
 private:
-        SG sgs_[14];
-
-        const Vec3 dirs_[14] = { { 1, 0, 0 },   { 0, 1, 0 },   { 0, 0, 1 },
-                                 { -1, 0, 0 },  { 0, -1, 0 },  { 0, 0, -1 },
-                                 { 1, 1, 1 },   { 1, 1, -1 },  { 1, -1, 1 },
-                                 { 1, -1, -1 }, { -1, 1, 1 },  { -1, 1, -1 },
-                                 { -1, -1, 1 }, { -1, -1, -1 } };
+        Vec3 p_[3];
+        Vec3 n_[3];
+        Vec2 t_[3];
+        tinyobj::material_t* mtl_;
+        AABB3D aabb_;
 };
+
+std::vector<Triangle> obj2voxel(const std::string& filepath,
+                                tinyobj::attrib_t* attrib,
+                                std::vector<tinyobj::shape_t>* shapes,
+                                std::vector<tinyobj::material_t>* materials);
 }
 
 #endif
