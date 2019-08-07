@@ -12,7 +12,8 @@ static float Res = .01f;
 
 //static std::vector<vo::LightProbe> probes;
 
-jql::Vec3 trace(gi::VoxelOctree& root, const jql::Ray& ray, int depth)
+jql::Vec3 trace(gi::VoxelOctree& root, const jql::Ray& ray, int depth,
+                bool even_invisible = false)
 {
         //// Drawback: probe disregard physical occlusions.
         //for (auto& probe : probes) {
@@ -26,7 +27,7 @@ jql::Vec3 trace(gi::VoxelOctree& root, const jql::Ray& ray, int depth)
         gi::VoxelOctree* leaf_ptr{};
         gi::VoxelBase* voxel_ptr{};
         ISect isect{};
-        if (!gi::ray_march(&root, ray, &leaf_ptr, &voxel_ptr, &isect)) {
+        if (!gi::ray_march(&root, ray, &leaf_ptr, &voxel_ptr, &isect, even_invisible)) {
                 float t = 0.5 * (ray.d.y + 1.0);
                 return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
                                  jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
@@ -132,12 +133,19 @@ int main()
         for (auto& voxel : voxels)
                 voxel_ptrs.push_back(&voxel);
 
+        std::vector<gi::LightProbe> probes;
+        for (int i = 0; i < 3; ++i) {
+                probes.push_back({ Vec3{ .5f - .6f * i, .4f, -.15f }, .2f });
+        }
+
+        for (auto& voxel : probes)
+                voxel_ptrs.push_back(&voxel);
+
         gi::VoxelOctree root;
         gi::ray_march_init(&root, voxel_ptrs, 6);
 
         auto res = root.aabb.size() / std::powf(2.f, 6.f);
         Res = *std::min_element(jql::begin(res), jql::end(res));
-        jql::print("Res={}\n", Res);
 
         Vec3 light_dir = jql::normalize(Vec3{ 1, 10, 1 });
         {
@@ -205,12 +213,15 @@ int main()
         jql::print("filtering...\n");
         gi::cone_trace_init_filter(&root);
 
-        //jql::print("light probing...\n");
+        jql::print("light probing...\n");
 
-        //for (int i = 0; i < 3; ++i) {
-        //        probes.push_back({ Vec3{ .5f - .6f * i, .4f, -.15f }, .2f });
-        //        probes.back().gather_light(root, Res, light_dir);
-        //}
+        for (int i = 0; i < 3; ++i) {
+                probes[i].gather_light(&root, Res, light_dir);
+        }
+
+        std::vector<gi::LightProbe*> probe_ptrs;
+        for (auto& p : probes)
+                probe_ptrs.push_back(&p);
 
         jql::print("cone tracing...\n");
         Camera cam{ jql::to_radian(90),
@@ -242,7 +253,7 @@ int main()
                                                                            y)) {
                                                                 auto c = trace(
                                                                         root,
-                                                                        ray, 5);
+                                                                        ray, 5, true);
                                                                 film.add(
                                                                         x, y,
                                                                         c * .25f);

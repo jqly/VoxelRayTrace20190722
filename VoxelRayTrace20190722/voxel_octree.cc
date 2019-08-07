@@ -94,7 +94,7 @@ void travorder(const VoxelOctree& root, const jql::Ray& ray, int ord[8])
 }
 
 bool ray_march_isect(const std::vector<VoxelBase*>& voxels, const Ray& ray,
-                     VoxelBase** voxel_ptr, ISect* isect)
+                     VoxelBase** voxel_ptr, ISect* isect, bool even_invisible)
 {
         struct Record {
                 ISect isect;
@@ -106,7 +106,8 @@ bool ray_march_isect(const std::vector<VoxelBase*>& voxels, const Ray& ray,
 
         for (int i = 0; i < voxels.size(); ++i) {
                 auto& voxel = voxels[i];
-                if (voxel->isect(ray, isect)) {
+                if ((even_invisible || voxel->is_visible()) &&
+                    voxel->isect(ray, isect)) {
                         float t = jql::length(isect->hit - ray.o);
                         records.push_back({ *isect, t, i });
                 }
@@ -125,13 +126,14 @@ bool ray_march_isect(const std::vector<VoxelBase*>& voxels, const Ray& ray,
 }
 
 bool ray_march(VoxelOctree* root, const Ray& ray, VoxelOctree** leaf_ptr,
-               VoxelBase** voxel_ptr, ISect* isect)
+               VoxelBase** voxel_ptr, ISect* isect, bool even_invisible)
 {
         if (!root->aabb.isect(ray, nullptr))
                 return false;
 
         if (is_leaf(*root)) {
-                if (ray_march_isect(root->voxels, ray, voxel_ptr, isect)) {
+                if (ray_march_isect(root->voxels, ray, voxel_ptr, isect,
+                                    even_invisible)) {
                         *leaf_ptr = root;
                         return true;
                 }
@@ -173,7 +175,8 @@ bool ray_march(VoxelOctree* root, const Ray& ray, VoxelOctree** leaf_ptr,
                         continue;
                 }
 
-                if (ray_march_isect(child->voxels, ray, voxel_ptr, isect)) {
+                if (ray_march_isect(child->voxels, ray, voxel_ptr, isect,
+                                    even_invisible)) {
                         *leaf_ptr = child;
                         return true;
                 }
@@ -450,7 +453,7 @@ bool Triangle::isect(const Ray& ray, jql::ISect* isect) const
 }
 
 Vec3 Triangle::get_diffuse(const ISect& isect, const Ray& light,
-                           const Vec3& color)
+                           const Vec3& color) const
 {
         Vec3 albedo = get_albedo(isect);
         auto tmp = jql::dot(isect.normal, -light.d);
@@ -479,5 +482,144 @@ bool Triangle::is_overlap(const AABB3D& aabb) const
         auto half = aabb.size() / 2.f;
         return 1 == triBoxOverlap(jql::begin(center), jql::begin(half),
                                   (float(*)[3])p_);
+}
+bool Triangle::is_visible() const
+{
+        return true;
+}
+SG::SG(Vec3 a, Vec3 d, float s)
+        : a{ a }
+        , d{ jql::normalize(d) }
+        , s{ s }
+{
+}
+Vec3 SG::eval(Vec3 dir) const
+{
+        float tmp = jql::dot(dir, d);
+        auto ret = a * std::expf(s * (tmp - 1));
+        return ret;
+}
+Vec3 SG::integral() const
+{
+        float tmp = 1.0f - exp(-2.0f * s);
+        return 2 * jql::pi * (a / s) * tmp;
+}
+SG prod(const SG& lhs, const SG& rhs)
+{
+        Vec3 d = (lhs.s * lhs.d + rhs.s * rhs.d) / (lhs.s + rhs.s);
+        float dl = jql::length(d);
+        float lm = lhs.s + rhs.s;
+
+        return { lhs.a * rhs.a * std::expf(lm * (dl - 1)), d, lm * dl };
+}
+Vec3 inner_prod(const SG& lhs, const SG& rhs)
+{
+        float uml = jql::length(lhs.s * lhs.d + rhs.s * rhs.d);
+        Vec3 expo = std::expf(uml - lhs.s - rhs.s) * lhs.a * rhs.a;
+        float other = 1.0f - std::expf(-2.0f * uml);
+        return (2.0f * jql::pi * expo * other) / uml;
+}
+LightProbe::LightProbe(Vec3 o, float r)
+        : o_{ o }
+        , r_{ r }
+{
+}
+
+AABB3D LightProbe::get_aabb() const
+{
+        return AABB3D{ o_ - r_, o_ + r_ };
+}
+
+bool LightProbe::isect(const Ray& ray, jql::ISect* isect) const
+{
+        float t{};
+        if (jql::sphere_ray_isect({ o_, r_ }, ray, &t)) {
+                *isect = jql::ISect{ ray.o + t * ray.d, isect->hit - o_ };
+                return true;
+        }
+        return false;
+}
+
+Vec3 LightProbe::get_diffuse(const ISect& isect, const Ray& light,
+                             const Vec3& color) const
+{
+        return get_albedo(isect);
+}
+
+Vec3 LightProbe::get_albedo(const jql::ISect& isect) const
+{
+        Vec3 dir = jql::normalize(isect.hit - o_);
+        return eval(dir);
+}
+bool LightProbe::is_overlap(const AABB3D& aabb) const
+{
+        auto c1 = aabb.min;
+        auto c2 = aabb.max;
+        auto squared = [](float v) { return v * v; };
+        float dist_squared = squared(r_);
+        if (o_.x < c1.x)
+                dist_squared -= squared(o_.x - c1.x);
+        else if (o_.x > c2.x)
+                dist_squared -= squared(o_.x - c2.x);
+        if (o_.y < c1.y)
+                dist_squared -= squared(o_.y - c1.y);
+        else if (o_.y > c2.y)
+                dist_squared -= squared(o_.y - c2.y);
+        if (o_.z < c1.z)
+                dist_squared -= squared(o_.z - c1.z);
+        else if (o_.z > c2.z)
+                dist_squared -= squared(o_.z - c2.z);
+        return dist_squared > 0;
+}
+
+bool LightProbe::is_visible() const
+{
+        return false;
+}
+void LightProbe::gather_light(VoxelOctree* root, float res, Vec3 light_dir)
+{
+        for (int i = 0; i < 14; ++i) {
+
+                auto dir = dirs_[i];
+
+                // for each directions, we sample 4 rays around.
+                Vec3 litness_avg{};
+
+                const Quat qs[4]{
+                        Quat::angle_axis(jql::to_radian(5), Vec3{ 1, 0, 0 }),
+                        Quat::angle_axis(jql::to_radian(-4), Vec3{ 0, 1, 0 }),
+                        Quat::angle_axis(jql::to_radian(2), Vec3{ 0, 0, 1 }),
+                        Quat::angle_axis(jql::to_radian(-4), Vec3{ 1, 1, 1 })
+                };
+
+                for (int s = 0; s < 4; ++s) {
+                        auto& q = qs[s];
+                        auto r_ = jql::rotate(q, dir);
+
+                        Ray ray{ o_, r_ };
+                        VoxelOctree* leaf_ptr;
+                        VoxelBase* voxel_ptr;
+                        ISect isect;
+                        if (!ray_march(root, ray, &leaf_ptr, &voxel_ptr,
+                                       &isect)) {
+                                auto litness = jql::dot(light_dir, ray.d);
+                                litness = jql::clamp(litness, 0.f, 1.f);
+                                litness_avg += .25f * litness;
+                                continue;
+                        }
+                        voxel_ptr->isect(ray, &isect);
+                        auto litness = cone_trace(*root, isect, res);
+                        litness_avg += .25f * litness;
+                }
+
+                sgs_[i] = SG{ litness_avg, dir, 10 };
+        }
+}
+Vec3 LightProbe::eval(Vec3 dir) const
+{
+        Vec3 litness{};
+        for (auto& sg : sgs_)
+                litness += sg.eval(dir);
+        return litness;
 }
 }

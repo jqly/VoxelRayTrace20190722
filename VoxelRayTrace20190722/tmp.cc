@@ -989,3 +989,14 @@ bool ConeTraceTree::raymarch(const Ray& ray, Voxel* voxel) const
         }
         return false;
 }
+
+auto squared = [](float v){return v*v;}
+float dist_squared = squared(r_);
+/* assume C1 and C2 are element-wise sorted, if not, do that now */
+if (o_.x < c1.x) dist_squared -= squared(o_.x - c1.x);
+else if (o_.x > c2.x) dist_squared -= squared(o_.x - c2.x);
+if (o_.y < c1.y) dist_squared -= squared(o_.y - c1.y);
+else if (o_.y > c2.y) dist_squared -= squared(o_.y - c2.y);
+if (o_.z < c1.z) dist_squared -= squared(o_.z - c1.z);
+else if (o_.z > c2.z) dist_squared -= squared(o_.z - c2.z);
+return dist_squared > 0;
