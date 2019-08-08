@@ -10,20 +10,9 @@
 
 static float Res = .01f;
 
-//static std::vector<vo::LightProbe> probes;
-
 jql::Vec3 trace(gi::VoxelOctree& root, const jql::Ray& ray, int depth,
                 bool even_invisible = false)
 {
-        //// Drawback: probe disregard physical occlusions.
-        //for (auto& probe : probes) {
-        //        float t{};
-        //        if (probe.isectt(ray, &t)) {
-        //                auto dir = jql::normalize(ray.o + t * ray.d - probe.o);
-        //                return probe.eval(dir);
-        //        }
-        //}
-
         gi::VoxelOctree* leaf_ptr{};
         gi::VoxelBase* voxel_ptr{};
         ISect isect{};
@@ -33,45 +22,8 @@ jql::Vec3 trace(gi::VoxelOctree& root, const jql::Ray& ray, int depth,
                 return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
                                  jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
         }
-
-        //return leaf_ptr->diffuse;
-
-        //if (voxel->type == vo::VoxelType::LightProbe) {
-
-        //        jql::Ray probe_ray{ voxel->aabb.center(), voxel->normal,
-        //                            jql::length(voxel->aabb.size()) };
-
-        //        auto voxel2 = vo::ray_march(root, probe_ray);
-        //        if (!voxel2)
-        //                return {};
-        //        jql::ISect isect{};
-        //        voxel2->aabb.isect(probe_ray, &isect);
-        //        auto litness = vo::compute_litness(root, isect, Res);
-        //        return litness + voxel2->litness;
-        //}
-
-        //return voxel->albedo;
-        //if (voxel->type == vo::VoxelType::LightSource)
-        //        return voxel->albedo;
-
-        //return voxel_ptr->get_diffuse();
-        ////return voxel_ptr->get_albedo(isect);
-        ////return .5f*(1+isect.normal);
         auto litness = gi::cone_trace(root, isect, Res);
-        //return litness;
         return voxel_ptr->get_albedo(isect) * (litness + leaf_ptr->diffuse);
-        //return voxel_ptr->get_diffuse() +
-        //       voxel_ptr->get_albedo(isect) * litness;
-        /*
-        jql::Ray sray;
-        jql::Vec3 att;
-        if (depth > 0 && voxel->scatter(ray, isect, &att, &sray)) {
-                sray.tmin += jql::eps;
-                return att * trace(root, sray, depth - 1);
-        }
-        else {
-                return { 0, 0, 0 };
-        }*/
 }
 
 void test_thread_pool()
