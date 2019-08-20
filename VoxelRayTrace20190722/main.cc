@@ -1,9 +1,6 @@
 #include "voxel_octree.h"
 #include <iostream>
 #include "camera.h"
-#include <thread>
-#include <future>
-#include "thread_pool_cpp/thread_pool.hpp"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -22,48 +19,18 @@ jql::Vec3 trace(gi::VoxelOctree& root, const jql::Ray& ray, int depth,
                 return jql::lerp(jql::Vec3{ 1.0f, 1.0f, 1.0f },
                                  jql::Vec3{ 0.6f, 0.8f, 1.0f }, t);
         }
-        auto litness = gi::cone_trace(root, isect, Res);
-        return voxel_ptr->get_albedo(isect) * (litness + leaf_ptr->diffuse);
-}
-
-void test_thread_pool()
-{
-        const unsigned NumWaiters = 1600;
-        std::vector<std::promise<float>> waiters{ NumWaiters };
-        tp::ThreadPool pool;
-        auto begin_count = std::chrono::high_resolution_clock::now()
-                                   .time_since_epoch()
-                                   .count();
-        for (int i = 0; i < waiters.size(); ++i)
-                pool.post([&waiters, i = i]() {
-                        float a = i;
-                        auto v = jql::Vec3{ a, a, a };
-                        auto q = jql::Quat{ (float)i, v };
-                        auto m = jql::Quat2Mat3(q);
-                        for (int i = 0; i < 100000; ++i) {
-                                m = jql::dot(m, m);
-                                m[0] = jql::normalize(m[0]);
-                                m[1] = jql::normalize(m[1]);
-                                m[2] = jql::normalize(m[2]);
-                        }
-                        waiters[i].set_value(jql::value_sum(m));
-                });
-
-        for (auto& waiter : waiters) {
-                auto future = waiter.get_future();
-                future.wait();
-        }
-
-        long long int end_count = std::chrono::high_resolution_clock::now()
-                                          .time_since_epoch()
-                                          .count();
-        std::cout << (double)(end_count - begin_count) / (double)1000000
-                  << " ms" << std::endl;
+        auto indirect_light = gi::cone_trace(root, isect, Res);
+        //return litness;
+        Vec3 direct_light = leaf_ptr->compute_illum(-ray.d);
+        if (voxel_ptr->is_visible())
+                return voxel_ptr->get_albedo(isect) *
+                       (indirect_light + direct_light);
+        else
+                return voxel_ptr->get_albedo(isect);
 }
 
 int main()
 {
-        //test_thread_pool();
         int W = 1024;
         int H = 1024;
         float SW = 1.f;
@@ -79,7 +46,7 @@ int main()
         auto voxels = gi::obj2voxel(
                 "C:\\Users\\jiangqilei\\source\\repos\\VoxelRayTrace20190722\\Asset\\sponza\\sponza.obj",
                 &attrib, &shapes, &materials);
-
+        jql::print("#tris={}\n", voxels.size());
         jql::print("octree...\n");
 
         std::vector<gi::VoxelBase*> voxel_ptrs;
@@ -103,76 +70,39 @@ int main()
         Res = *std::min_element(jql::begin(res), jql::end(res));
 
         Vec3 light_dir = jql::normalize(Vec3{ 1, 10, 1 });
-        {
-                jql::print("light map...\n");
-                const int W = 2048;
-                const int H = 2048;
-                const int partw = 8;
-                const int parth = 8;
-                const int subimgw = W / partw;
-                const int subimgh = H / parth;
-                Film sfilm(1, 1, W, H);
-                Camera scam{ jql::to_radian(60),
-                             { 1, 10, 1 },
-                             { 0, 0, 0 },
-                             { 0, 1, 0 } };
-                std::vector<std::promise<void>> waiters{ partw * parth };
-                tp::ThreadPool pool;
 
-                for (int ph = 0; ph < parth; ++ph) {
-                        for (int pw = 0; pw < partw; ++pw) {
-                                pool.post([&root, &scam, &waiters, pw, ph,
-                                           partw, parth, &sfilm, subimgw,
-                                           subimgh]() {
-                                        for (int x = pw * subimgw;
-                                             x < pw * subimgw + subimgw; ++x) {
-                                                for (int y = ph * subimgh;
-                                                     y < ph * subimgh + subimgh;
-                                                     ++y) {
-                                                        for (const auto& ray :
-                                                             scam.gen_rays4(
-                                                                     sfilm, x,
-                                                                     y)) {
-                                                                gi::VoxelOctree*
-                                                                        leaf_ptr{};
-                                                                jql::ISect
-                                                                        isect{};
-                                                                gi::VoxelBase*
-                                                                        voxel_ptr{};
-                                                                if (!gi::ray_march(
-                                                                            &root,
-                                                                            ray,
-                                                                            &leaf_ptr,
-                                                                            &voxel_ptr,
-                                                                            &isect))
-                                                                        continue;
-                                                                leaf_ptr->diffuse +=
-                                                                        voxel_ptr
-                                                                                ->get_diffuse(
-                                                                                        isect,
-                                                                                        ray,
-                                                                                        Vec3{ .5,
-                                                                                              .5,
-                                                                                              .5 });
-                                                        }
-                                                }
-                                        }
-                                        waiters[ph * partw + pw].set_value();
-                                });
+        jql::print("light map...\n");
+        Film sfilm(1, 1, 2048, 2048);
+        Camera scam{
+                jql::to_radian(60), { 1, 10, 1 }, { 0, 0, 0 }, { 0, 1, 0 }
+        };
+
+        render_mt(&sfilm, [&scam, &root](Film* film, int px, int py) {
+                auto rays = scam.gen_rays4(*film, px, py);
+                for (const auto& ray : rays) {
+                        gi::VoxelOctree* leaf_ptr{};
+                        jql::ISect isect{};
+                        gi::VoxelBase* voxel_ptr{};
+                        if (!gi::ray_march(&root, ray, &leaf_ptr, &voxel_ptr,
+                                           &isect))
+                                continue;
+                        auto illum = voxel_ptr->get_diffuse(isect, ray,
+                                                            Vec3{ 1, 1, 1 });
+                        for (int i = 0; i < 6; ++i) {
+                                float coeff = jql::dot(leaf_ptr->illum_d[i], isect.normal);
+                                coeff = jql::clamp(coeff, 0.f, 1.f);
+                                leaf_ptr->illum[i] += coeff * illum;
                         }
                 }
-                for (auto& waiter : waiters)
-                        waiter.get_future().wait();
-        }
+        });
 
         jql::print("filtering...\n");
         gi::cone_trace_init_filter(&root);
 
         jql::print("light probing...\n");
 
-        for (auto& probe : probes) {
-                probe.gather_light(&root, Res, light_dir, root.diffuse);
-        }
+        for (auto& probe : probes)
+                probe.gather_light(&root, Res, light_dir, root.compute_illum(light_dir));
 
         std::vector<gi::LightProbe*> probe_ptrs;
         for (auto& p : probes)
@@ -185,53 +115,12 @@ int main()
                     { 0, 1, 0 } };
         Film film(SW, SH, W, H);
 
-        {
-                const int partw = 8;
-                const int parth = 8;
-                const int subimgw = W / partw;
-                const int subimgh = H / parth;
-                std::vector<std::promise<void>> waiters{ partw * parth };
-                tp::ThreadPool pool;
-
-                for (int ph = 0; ph < parth; ++ph) {
-                        for (int pw = 0; pw < partw; ++pw) {
-                                pool.post([&root, &cam, &waiters, pw, ph, partw,
-                                           parth, &film, subimgw, subimgh]() {
-                                        for (int x = pw * subimgw;
-                                             x < pw * subimgw + subimgw; ++x) {
-                                                for (int y = ph * subimgh;
-                                                     y < ph * subimgh + subimgh;
-                                                     ++y) {
-                                                        for (const auto& ray :
-                                                             cam.gen_rays4(film,
-                                                                           x,
-                                                                           y)) {
-                                                                auto c = trace(
-                                                                        root,
-                                                                        ray, 5,
-                                                                        true);
-                                                                film.add(
-                                                                        x, y,
-                                                                        c * .25f);
-                                                        }
-                                                }
-                                        }
-                                        waiters[ph * partw + pw].set_value();
-                                });
-                        }
+        render_mt(&film, [&cam, &root](Film* film, int px, int py) {
+                for (const auto& ray : cam.gen_rays4(*film, px, py)) {
+                        auto c = trace(root, ray, 5, true);
+                        film->add(px, py, c * .25f);
                 }
-                for (auto& waiter : waiters)
-                        waiter.get_future().wait();
-        }
-
-        //for (int x = 0; x < film.nx; ++x) {
-        //        for (int y = 0; y < film.ny; ++y) {
-        //                for (const auto& ray : cam.gen_rays1(film, x, y)) {
-        //                        auto c = trace(root, ray, 5);
-        //                        film.add(x, y, c * .25f);
-        //                }
-        //        }
-        //}
+        });
 
         auto d = film.to_float_array();
         stbi_write_hdr("./test2.hdr", W, H, 3, d.data());

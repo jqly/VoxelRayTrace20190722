@@ -5,6 +5,9 @@
 #include <vector>
 #include <random>
 #include "graphics_math.h"
+#include <thread>
+#include <future>
+#include "thread_pool_cpp/thread_pool.hpp"
 
 using jql::Vec2;
 using jql::iVec2;
@@ -34,6 +37,35 @@ public:
 private:
         std::vector<Vec3> data_;
 };
+
+// fn(Film*, int px, int py);
+template <typename FN>
+void render_mt(Film* film, FN fn)
+{
+        const iVec2 nt{ 8, 8 };
+        const iVec2 pt{ film->nx / nt.x, film->ny / nt.y };
+
+        std::vector<std::promise<void>> waiters(nt.x * nt.y);
+        tp::ThreadPool pool;
+
+        for (int tx = 0; tx < nt.x; ++tx) {
+                for (int ty = 0; ty < nt.y; ++ty) {
+                        auto& waiter = waiters[tx + ty * nt.x];
+                        const iVec2 p0 = pt * iVec2{ tx, ty };
+                        const iVec2 p1 = p0 + pt;
+                        pool.post([film, &waiter, &fn, p0, p1]() {
+                                for (int py = p0.y; py < p1.y; ++py) {
+                                        for (int px = p0.x; px < p1.x; ++px) {
+                                                fn(film, px, py);
+                                        }
+                                }
+                                waiter.set_value();
+                        });
+                }
+        }
+        for (auto& waiter : waiters)
+                waiter.get_future().wait();
+}
 
 class Camera {
 public:

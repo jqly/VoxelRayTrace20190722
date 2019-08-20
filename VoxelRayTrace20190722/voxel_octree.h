@@ -66,8 +66,20 @@ public:
         std::unique_ptr<VoxelOctree> children[8];
         // For cone trace.
         float coverage{};
-        Vec3 diffuse{};
         int depth{};
+        Vec3 illum[6]{};
+        static const Vec3 illum_d[6];
+        Vec3 compute_illum(Vec3 d) const
+        {
+                Vec3 result{};
+                for (int i = 0; i < 6; ++i) {
+                        float coeff =
+                                jql::dot(illum_d[i], d);
+                        coeff = jql::clamp(coeff, 0.f, 1.f);
+                        result += coeff * illum[i];
+                }
+                return result;
+        }
 };
 
 void ray_march_init(VoxelOctree* root, std::vector<VoxelBase*>& voxels,

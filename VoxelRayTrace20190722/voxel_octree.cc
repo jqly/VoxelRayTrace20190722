@@ -16,6 +16,9 @@
 namespace gi
 {
 
+const Vec3 VoxelOctree::illum_d[]{ { 1, 0, 0 },  { 0, 1, 0 },  { 0, 0, 1 },
+                             { -1, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 } };
+
 bool is_leaf(const VoxelOctree& root)
 {
         return root.children[0] == nullptr;
@@ -189,21 +192,23 @@ void cone_trace_init_filter(VoxelOctree* root)
         if (is_leaf(*root)) {
                 if (root->voxels.empty()) {
                         root->coverage = 0;
-                        root->diffuse = {};
+                        std::fill_n(root->illum, 6, Vec3{ 0, 0, 0 });
                         return;
                 }
                 root->coverage = 1.f;
                 return;
         }
         root->coverage = 0.f;
-        root->diffuse = Vec3{};
+        std::fill_n(root->illum, 6, Vec3{ 0, 0, 0 });
         for (int i = 0; i < 8; ++i) {
                 cone_trace_init_filter(root->children[i].get());
                 root->coverage += root->children[i]->coverage;
-                root->diffuse += root->children[i]->diffuse;
+                for (int f = 0; f < 6; ++f)
+                        root->illum[f] += root->children[i]->illum[f];
         }
+        for (int f = 0; f < 6; ++f)
+                root->illum[f] /= 8;
         root->coverage /= 8.f;
-        root->diffuse /= 8.f;
 }
 
 class Cone {
@@ -263,11 +268,13 @@ Vec3 cone_trace(const VoxelOctree& root, const Cone& cone, float min_voxel_size)
                         split_level--;
                 }
                 if (split_level == 0) {
+
+                        Vec3 illum = tree->compute_illum(-cone.d);
+
                         auto transparency = jql::clamp(1.f - opacity, 0.f, 1.f);
                         float a = tree->coverage * cone.step;
                         diffuse += (1.f / (1 + cone.litness_decay * dist)) *
-                                   transparency * tree->coverage *
-                                   tree->diffuse;
+                                   transparency * tree->coverage * illum;
                         opacity += transparency * a;
                 }
                 dist += cone.step * diam;
@@ -593,7 +600,7 @@ void LightProbe::gather_light(VoxelOctree* root, float res, Vec3 light_dir,
                 for (auto r : random_points_in_sphere_) {
                         Vec3 rd = r + dir * 2.6131f;
 
-                        Ray ray{ o_, rd, r_+res };
+                        Ray ray{ o_, rd, r_ + res };
                         VoxelOctree* leaf_ptr;
                         VoxelBase* voxel_ptr;
                         ISect isect;
@@ -602,20 +609,19 @@ void LightProbe::gather_light(VoxelOctree* root, float res, Vec3 light_dir,
                                 litness += light_color;
                                 continue;
                         }
-                        float t = jql::length(isect.hit - o_)/res;
-                        litness += std::expf(-t*.2f)*cone_trace(*root, isect, res);
+                        float t = jql::length(isect.hit - o_) / res;
+                        litness += /*std::expf(-t * .2f) **/
+                                   cone_trace(*root, isect, res);
                 }
                 litness /= (float)random_points_in_sphere_.size();
                 sgs_[i] = SG{ litness, dir, 10 };
         }
-        float integral{};
-        for (int i = 0; i < 14; ++i)
-                integral += jql::length(sgs_[i].integral());
-        light_color /= integral;
-        for (int i = 0; i < 14; ++i)
-                sgs_[i].a *= light_color;
-
-
+        //float integral{};
+        //for (int i = 0; i < 14; ++i)
+        //        integral += jql::length(sgs_[i].integral());
+        //light_color /= integral;
+        //for (int i = 0; i < 14; ++i)
+        //        sgs_[i].a *= light_color;
 }
 Vec3 LightProbe::eval(Vec3 dir) const
 {
