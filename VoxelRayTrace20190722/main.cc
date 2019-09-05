@@ -53,15 +53,15 @@ int main()
         for (auto& voxel : voxels)
                 voxel_ptrs.push_back(&voxel);
 
-        std::vector<gi::LightProbe> probes;
-        jql::PCG pcg{ 0xc01dbeefdeadbead };
-        for (int i = 0; i < 100; ++i) {
-                Vec3 rp = jql::random_point_in_unit_sphere(pcg);
-                probes.push_back({ Vec3{ .5f + rp.x, .4f + rp.y, rp.z }, .1f });
-        }
+        //std::vector<gi::LightProbe> probes;
+        //jql::PCG pcg{ 0xc01dbeefdeadbead };
+        //for (int i = 0; i < 100; ++i) {
+        //        Vec3 rp = jql::random_point_in_unit_sphere(pcg);
+        //        probes.push_back({ Vec3{ .5f + rp.x, .4f + rp.y, rp.z }, .1f });
+        //}
 
-        for (auto& voxel : probes)
-                voxel_ptrs.push_back(&voxel);
+        //for (auto& voxel : probes)
+        //        voxel_ptrs.push_back(&voxel);
 
         gi::VoxelOctree root;
         gi::ray_march_init(&root, voxel_ptrs, 6);
@@ -99,14 +99,14 @@ int main()
         jql::print("filtering...\n");
         gi::cone_trace_init_filter(&root);
 
-        jql::print("light probing...\n");
+        //jql::print("light probing...\n");
 
-        for (auto& probe : probes)
-                probe.gather_light(&root, Res, light_dir, root.compute_illum(light_dir));
+        //for (auto& probe : probes)
+        //        probe.gather_light(&root, Res, light_dir, root.compute_illum(light_dir));
 
-        std::vector<gi::LightProbe*> probe_ptrs;
-        for (auto& p : probes)
-                probe_ptrs.push_back(&p);
+        //std::vector<gi::LightProbe*> probe_ptrs;
+        //for (auto& p : probes)
+        //        probe_ptrs.push_back(&p);
 
         jql::print("cone tracing...\n");
         Camera cam{ jql::to_radian(90),
